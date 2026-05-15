@@ -88,9 +88,3 @@ To use a GPU (if available), update the `device` variable:
 ```python
 device = "cuda"
 ```
-
-## Notes
-
-- This project is intended as a simple proof-of-concept for image-to-text semantic search using CLIP.
-- The current implementation runs a single image query and prints only the best result.
-

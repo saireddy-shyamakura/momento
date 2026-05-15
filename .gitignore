@@ -9,3 +9,4 @@ wheels/
 # Virtual environments
 .venv
 image_store.pkl
+images/

@@ -1,5 +1,6 @@
 import os
 import logging
+import argparse
 from features import extract_image_features
 from index import Index
 from search import image_search, text_search
@@ -19,26 +20,38 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Main application entry point with input validation."""
+    parser = argparse.ArgumentParser(description="Momento Image Search Engine")
+    parser.add_argument("--dir", "-d", type=str, help="Directory containing images to index on startup")
+    args = parser.parse_args()
+
     try:
         # Initialize index
         index = Index()
         
-        # Add images from folder (batched)
-        images_folder = os.path.join(os.path.dirname(__file__), "images")
-        add_images(images_folder, index)
+        # Add images from folder if provided
+        if args.dir:
+            images_folder = os.path.abspath(args.dir)
+            logger.info(f"Indexing images from provided directory: {images_folder}")
+            add_images(images_folder, index)
+        else:
+            # Default fallback for backwards compatibility
+            images_folder = os.path.join(os.path.dirname(__file__), "images")
+            if os.path.exists(images_folder):
+                add_images(images_folder, index)
         
         logger.info(f"Database ready: {index.get_vector_count()} images indexed")
 
         print("\n=== Image Search Engine ===")
         print("1. Image search (find similar images)")
         print("2. Text search (search by description)")
+        print("3. Index new images from directory")
         
         while True:
             try:
-                choice = input("\nChoice (1 or 2, or 'q' to quit): ").strip()
+                choice = input("\nChoice (1, 2, 3, or 'q' to quit): ").strip()
                 
                 # Validate choice
-                is_valid, error_msg = validate_choice(choice, ["1", "2", "q"])
+                is_valid, error_msg = validate_choice(choice, ["1", "2", "3", "q"])
                 if not is_valid:
                     print(f"Invalid input: {error_msg}")
                     continue
@@ -52,6 +65,9 @@ def main():
 
                 elif choice == "2":
                     text_search_mode(index)
+                    
+                elif choice == "3":
+                    add_images_mode(index)
 
             except EOFError:
                 print("\nGoodbye!")
@@ -168,6 +184,32 @@ def text_search_mode(index: Index):
             break
         except Exception as e:
             logger.error(f"Search error: {e}")
+            print(f"Error: {e}")
+
+
+def add_images_mode(index: Index):
+    """Interactive mode to add images from a directory."""
+    print("\n--- Index New Images ---")
+    while True:
+        try:
+            folder_path = input("Directory path (or 'back' to return): ").strip()
+            
+            if folder_path.lower() == "back":
+                break
+                
+            is_valid, error_msg = validate_folder_path(folder_path)
+            if not is_valid:
+                print(f"Invalid directory: {error_msg}")
+                continue
+                
+            add_images(folder_path, index)
+            print(f"Current database size: {index.get_vector_count()} images.")
+            break
+            
+        except EOFError:
+            break
+        except Exception as e:
+            logger.error(f"Error adding images: {e}")
             print(f"Error: {e}")
 
 

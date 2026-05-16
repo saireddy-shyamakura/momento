@@ -31,20 +31,16 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
 
     paths_to_process = []
     failed = 0
-    skipped = 0
     
     logger.info(f"Scanning folder: {folder}")
     
+    # Collect all candidate image paths first
+    candidate_paths = []
     for file in os.listdir(folder):
         path = os.path.abspath(os.path.join(folder, file))
 
         # Skip non-image files
         if not path.lower().endswith(SUPPORTED_EXTENSIONS):
-            continue
-
-        # Skip already indexed files
-        if index.item_exists(path):
-            skipped += 1
             continue
 
         # Validate file before processing
@@ -54,7 +50,13 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
             failed += 1
             continue
 
-        paths_to_process.append(path)
+        candidate_paths.append(path)
+
+    # Bulk check which paths are already indexed (single DB query)
+    existing_ids = index.get_existing_ids(candidate_paths)
+    skipped = len(existing_ids)
+    
+    paths_to_process = [p for p in candidate_paths if p not in existing_ids]
 
     if not paths_to_process:
         if skipped > 0:

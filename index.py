@@ -92,6 +92,21 @@ class Index:
         """Get total number of vectors in index."""
         return self.collection.count()
     
+    def get_existing_ids(self, paths: List[str]) -> set:
+        """
+        Bulk check which paths already exist in the index.
+        
+        Args:
+            paths: List of absolute file paths to check
+            
+        Returns:
+            Set of paths that already exist in the collection
+        """
+        if not paths:
+            return set()
+        result = self.collection.get(ids=paths)
+        return set(result["ids"])
+
     def item_exists(self, path: str) -> bool:
         """Check if an image path already exists in index."""
         import os

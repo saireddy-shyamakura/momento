@@ -6,6 +6,10 @@ CHROMA_DB_DIR = os.path.join(BASE_DIR, "chroma_db")
 MODEL_NAME = "ViT-B/16"
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
 
+from logger import get_logger
+
+logger = get_logger(__name__)
+
 def get_device() -> str:
     """
     Priority:
@@ -23,16 +27,16 @@ def get_device() -> str:
         device = "cuda"
         gpu_count = torch.cuda.device_count()
         gpu_name = torch.cuda.get_device_name(0)
-        print(f"CUDA available: {gpu_count} GPU(s) detected - {gpu_name}")
+        logger.info(f"CUDA available: {gpu_count} GPU(s) detected - {gpu_name}")
         return device
     
     # Auto-detect MPS (Apple Silicon)
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        print("MPS (Apple Silicon) available")
+        logger.info("MPS (Apple Silicon) available")
         return "mps"
     
     # Fall back to CPU
-    print("No GPU detected, using CPU")
+    logger.info("No GPU detected, using CPU")
     return "cpu"
 
 

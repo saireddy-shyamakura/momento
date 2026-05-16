@@ -1,97 +1,114 @@
-# clip-semantic-search
+# Momento
 
-clip-semantic-search is a semantic search engine that uses OpenAI CLIP to search through a local database of images using text descriptions or other images. It builds a fast, vectorized local index for rapid retrieval.
-
-## Overview
-
-The project loads a CLIP model (`ViT-B/32`), encodes images into vector embeddings, and stores them in a persistent index (`image_store.pkl`). It allows you to search for images by providing either a text query (Text-to-Image search) or another image (Image-to-Image search). 
+A semantic image search engine powered by **OpenAI CLIP** and **ChromaDB**. Search your local image library using natural language descriptions or find visually similar images — all running locally on your machine.
 
 ## Features
 
-- **Batch Ingestion**: Easily add single images, multiple images, or entire directories at once using `add_images()`.
-- **Vectorized Search**: Fast image retrieval using NumPy matrix multiplication.
-- **Persistent Index**: Images and their features are saved to `image_store.pkl` to avoid re-encoding on every run.
-- **Text-to-Image Search**: Search your image database using natural language queries.
-- **Image-to-Image Search**: Find visually similar images by querying with an image.
-- **RGB Conversion**: Automatically handles varied image formats (e.g. PNGs with transparency) safely.
+- **Text-to-Image Search** — Describe what you're looking for in plain English and find matching images
+- **Image-to-Image Search** — Query with an image to find visually similar ones
+- **Batch Ingestion** — Efficiently indexes entire directories using batched GPU/CPU processing
+- **Persistent Vector Store** — Uses ChromaDB for durable, on-disk storage (no re-encoding on restart)
+- **Auto Device Detection** — Automatically uses CUDA, Apple Silicon (MPS), or CPU
+- **Similarity Threshold** — Filters out irrelevant results below a configurable confidence score
+- **Paginated Results** — Large result sets are displayed page-by-page
 
 ## Requirements
 
 - Python 3.12+
-- `torch`
-- `Pillow`
+- `torch`, `torchvision`
 - `clip` (OpenAI CLIP)
-- `numpy`
+- `chromadb`
+- `Pillow`
 
 ## Installation
 
-This project uses `uv` to manage the environment and dependencies.
-
-1. Install `uv` if needed:
+This project uses [`uv`](https://docs.astral.sh/uv/) to manage the environment and dependencies.
 
 ```bash
-python -m pip install uv
-```
+# Install uv if needed
+pip install uv
 
-2. Sync dependencies:
-
-```bash
+# Clone and sync
+git clone https://github.com/your-username/momento.git
+cd momento
 uv sync
 ```
 
 ## Usage
 
-Run the main script using `uv`:
+### Quick Start
 
 ```bash
-uv run python main.py
+# Index a folder and start searching
+uv run main.py --dir ~/Pictures
+
+# Or just start (indexes ./images/ by default if it exists)
+uv run main.py
 ```
 
-### Adding Images
+### CLI Options
 
-You can add individual image files or entire directories to your local index. Features are automatically extracted and saved.
+| Flag | Description |
+|------|-------------|
+| `--dir`, `-d` | Directory containing images to index on startup |
+| `-h`, `--help` | Show help message |
 
-```python
-# Add multiple specific files
-add_images("images/dog.jpg", "images/car.jpg")
+### Interactive Menu
 
-# Add an entire directory of images
-add_images("images")
+Once running, you'll see:
+
+```
+=== Image Search Engine ===
+1. Image search (find similar images)
+2. Text search (search by description)
+3. Index new images from directory
+
+Choice (1, 2, 3, or 'q' to quit):
 ```
 
-### Searching
+- **Option 1** — Provide a path to a query image and find similar ones in your index
+- **Option 2** — Type a text description (e.g., "sunset over mountains") to find matching images
+- **Option 3** — Add more images from any directory without restarting
 
-**Image Search**
-Find images in your index that are visually similar to a query image:
-```python
-results = image_search("images/query.jpg", top_k=3)
+### Supported Formats
+
+`.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`
+
+## Architecture
+
+```
+momento/
+├── main.py          # CLI entry point and interactive menu
+├── config.py        # Device detection, paths, constants
+├── features.py      # CLIP model loading and feature extraction (single + batch)
+├── index.py         # ChromaDB vector store (add, search, bulk existence check)
+├── search.py        # Image and text search with similarity thresholds
+├── add_images.py    # Directory scanning and batch ingestion pipeline
+├── validation.py    # Input validation helpers
+├── logger.py        # Centralized logging (console + file)
+└── pyproject.toml   # Dependencies and project metadata
 ```
 
-**Text Search**
-Find images in your index that match a text description:
-```python
-results = text_search("a person running", top_k=3)
-```
-
-## Example Output
-
-```text
-Loaded 4 images
-Added: /absolute/path/to/images/new_image.jpg
-
-Top Matches (Image Search) :
-/path/to/images/dog2.jpg -> 1.0000
-/path/to/images/dog.jpg -> 0.7702
-
-Top Matches (Text Search):
-/path/to/images/person_running.jpg -> 0.2761
-/path/to/images/dog.jpg -> 0.2505
-```
+**Model:** OpenAI CLIP `ViT-B/16`
+**Vector Store:** ChromaDB with cosine similarity (persistent on-disk)
+**Logging:** Console (INFO) + file at `logs/momento.log` (DEBUG)
 
 ## Configuration
 
-To use a GPU for faster CLIP inference, update the `device` variable at the top of `main.py`:
+Device detection is fully automatic in `config.py`:
+
+| Hardware | Device |
+|----------|--------|
+| NVIDIA GPU | `cuda` |
+| Apple Silicon | `mps` |
+| Everything else | `cpu` |
+
+Key constants in `config.py`:
 
 ```python
-device = "cuda" # Set to "cuda" for NVIDIA GPUs or "mps" for Apple Silicon
+MODEL_NAME = "ViT-B/16"
+SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
 ```
+
+The similarity threshold (default `0.25`) can be adjusted in `search.py` to control result relevance.
+

@@ -17,8 +17,9 @@ clip = { git = "https://github.com/openai/CLIP.git" }
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.152.7",
     "pytest>=9.0.3",
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "src"]

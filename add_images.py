@@ -35,7 +35,11 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
     
     # Collect all candidate image paths recursively
     candidate_paths = []
-    for root, _, files in os.walk(folder):
+    for root, dirs, files in os.walk(folder, followlinks=False):
+        for d in dirs:
+            full = os.path.join(root, d)
+            if os.path.islink(full):
+                logger.debug(f"Skipping symlink directory: {full}")
         for file in files:
             path = os.path.abspath(os.path.join(root, file))
 
@@ -55,6 +59,8 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
     # Bulk check which paths are already indexed (single DB query)
     existing_ids = index.get_existing_ids(candidate_paths)
     skipped = len(existing_ids)
+    if skipped > 0:
+        logger.info(f"Resuming: {skipped} images already indexed.")
     
     paths_to_process = [p for p in candidate_paths if p not in existing_ids]
 

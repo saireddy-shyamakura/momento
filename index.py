@@ -9,9 +9,9 @@ logger = get_logger(__name__)
 class Index:
     """Manages ChromaDB vector indexing for fast image search with persistent storage."""
     
-    def __init__(self):
+    def __init__(self, db_path: str = CHROMA_DB_DIR):
         """Initialize ChromaDB client and collection."""
-        self.client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
+        self.client = chromadb.PersistentClient(path=db_path)
         self.collection = self.client.get_or_create_collection(
             name="images",
             metadata={"hnsw:space": "cosine"} # Cosine similarity space matches our previous Inner Product since vectors are normalized
@@ -114,3 +114,14 @@ class Index:
         abs_path = os.path.abspath(path)
         result = self.collection.get(ids=[abs_path])
         return len(result["ids"]) > 0
+
+    def delete_all(self) -> None:
+        """Delete every entry from the collection."""
+        ids = self.collection.get()["ids"]
+        if ids:
+            self.collection.delete(ids=ids)
+
+    def get_all_paths(self) -> List[str]:
+        """Return every stored path (used by --verify)."""
+        result = self.collection.get()
+        return result["ids"]

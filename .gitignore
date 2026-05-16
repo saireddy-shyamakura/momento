@@ -17,3 +17,5 @@ logs/
 # Misc
 ToDo.txt
 stable_release_roadmap.md
+
+.kiro/

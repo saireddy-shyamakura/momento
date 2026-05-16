@@ -1,4 +1,5 @@
 import os
+import sys
 from logger import setup_logger
 import argparse
 from typing import List, Tuple
@@ -9,20 +10,79 @@ from validation import (
     validate_choice, validate_positive_int, ValidationError
 )
 from add_images import add_images
+from config import SIMILARITY_THRESHOLD
+from momento.output import render_result
 
 logger = setup_logger(__name__)
+
+try:
+    from importlib.metadata import version as _pkg_version
+    _VERSION = _pkg_version("momento")
+except Exception:
+    _VERSION = "1.0.0-beta"
+
+
+def verify_index(index: Index) -> int:
+    """Remove stale entries whose file paths no longer exist on disk.
+
+    Returns the count of removed (stale) entries.
+    """
+    paths = index.get_all_paths()
+    stale = [p for p in paths if not os.path.exists(p)]
+    if stale:
+        index.collection.delete(ids=stale)
+        print(f"Removed {len(stale)} stale entries.")
+    else:
+        print("Index is clean — no stale entries found.")
+    return len(stale)
 
 
 def main():
     """Main application entry point with input validation."""
     parser = argparse.ArgumentParser(description="Momento Image Search Engine")
     parser.add_argument("--dir", "-d", type=str, help="Directory containing images to index on startup")
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
+    parser.add_argument("--reset", action="store_true", help="Delete all index entries and exit")
+    parser.add_argument("--count", action="store_true", help="Print number of indexed images and exit")
+    parser.add_argument("--threshold", type=float, default=None,
+                        help="Similarity threshold for search results (0.0–1.0)")
+    parser.add_argument("--verify", action="store_true", help="Remove stale index entries and exit")
     args = parser.parse_args()
+
+    # --version: print version and exit 0 (no index needed)
+    if args.version:
+        print(f"momento {_VERSION}")
+        sys.exit(0)
+
+    # --threshold validation
+    if args.threshold is not None:
+        if not (0.0 <= args.threshold <= 1.0):
+            print("Error: --threshold must be between 0.0 and 1.0", file=sys.stderr)
+            sys.exit(1)
+        threshold = args.threshold
+    else:
+        threshold = SIMILARITY_THRESHOLD
 
     try:
         # Initialize index
         index = Index()
-        
+
+        # Handle --reset flag
+        if args.reset:
+            index.delete_all()
+            print("Index reset: all entries deleted.")
+            sys.exit(0)
+
+        # Handle --count flag
+        if args.count:
+            print(index.get_vector_count())
+            sys.exit(0)
+
+        # Handle --verify flag
+        if args.verify:
+            verify_index(index)
+            sys.exit(0)
+
         # Add images from folder if provided
         if args.dir:
             images_folder = os.path.abspath(args.dir)
@@ -56,10 +116,10 @@ def main():
                     break
 
                 if choice == "1":
-                    image_search_mode(index)
+                    image_search_mode(index, threshold)
 
                 elif choice == "2":
-                    text_search_mode(index)
+                    text_search_mode(index, threshold)
                     
                 elif choice == "3":
                     add_images_mode(index)
@@ -91,7 +151,7 @@ def print_paginated_results(results: List[Tuple[float, str]], page_size: int = 1
     for i in range(0, total, page_size):
         chunk = results[i:i+page_size]
         for j, (score, path) in enumerate(chunk, i + 1):
-            print(f"{j}. {path} -> {float(score):.4f}")
+            print(render_result(j, score, path))
             
         if i + page_size < total:
             try:
@@ -103,7 +163,7 @@ def print_paginated_results(results: List[Tuple[float, str]], page_size: int = 1
                 break
 
 
-def image_search_mode(index: Index):
+def image_search_mode(index: Index, threshold: float = SIMILARITY_THRESHOLD):
     """Interactive image search mode."""
     if index.get_vector_count() == 0:
         print("No images in database. Add images first.")
@@ -138,7 +198,7 @@ def image_search_mode(index: Index):
                     continue
             
             # Perform search
-            results = image_search(query_path, index, top_k)
+            results = image_search(query_path, index, top_k, threshold=threshold)
             
             print_paginated_results(results)
         except ValidationError as e:
@@ -153,7 +213,7 @@ def image_search_mode(index: Index):
             print(f"Error: {e}")
 
 
-def text_search_mode(index: Index):
+def text_search_mode(index: Index, threshold: float = SIMILARITY_THRESHOLD):
     """Interactive text search mode."""
     if index.get_vector_count() == 0:
         print("No images in database. Add images first.")
@@ -188,7 +248,7 @@ def text_search_mode(index: Index):
                     continue
             
             # Perform search
-            results = text_search(query, index, top_k)
+            results = text_search(query, index, top_k, threshold=threshold)
             
             print_paginated_results(results)
         except ValidationError as e:

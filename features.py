@@ -136,7 +136,8 @@ def extract_image_features_batch(image_paths: List[str], batch_size: int = 32) -
                     
         except RuntimeError as e:
             if "out of memory" in str(e).lower():
-                logger.error(f"GPU OOM processing batch. Try reducing batch size or using CPU mode.")
+                logger.error(f"GPU OOM processing batch. Stopping ingestion early to prevent crash. Try reducing batch size.")
+                break
             else:
                 logger.error(f"Failed to extract features for batch: {e}")
         except Exception as e:

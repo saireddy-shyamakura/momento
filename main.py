@@ -1,6 +1,7 @@
 import os
 import logging
 import argparse
+from typing import List, Tuple
 from features import extract_image_features
 from index import Index
 from search import image_search, text_search
@@ -81,6 +82,26 @@ def main():
         raise
 
 
+def print_paginated_results(results: List[Tuple[float, str]], page_size: int = 10):
+    """Print search results with simple pagination."""
+    if not results:
+        print("No results found")
+        return
+        
+    total = len(results)
+    print(f"\nFound {total} matches:")
+    
+    for i in range(0, total, page_size):
+        chunk = results[i:i+page_size]
+        for j, (score, path) in enumerate(chunk, i + 1):
+            print(f"{j}. {path} -> {float(score):.4f}")
+            
+        if i + page_size < total:
+            cont = input("\nPress Enter to see more results, or 'q' to quit: ").strip().lower()
+            if cont == 'q':
+                break
+
+
 def image_search_mode(index: Index):
     """Interactive image search mode."""
     if index.get_vector_count() == 0:
@@ -118,13 +139,7 @@ def image_search_mode(index: Index):
             # Perform search
             results = image_search(query_path, index, top_k)
             
-            if not results:
-                print("No results found")
-            else:
-                print(f"\nTop {len(results)} matches:")
-                for i, (score, path) in enumerate(results, 1):
-                    print(f"{i}. {path} -> {float(score):.4f}")
-                    
+            print_paginated_results(results)
         except ValidationError as e:
             print(f"Validation error: {e}")
         except EOFError:
@@ -171,13 +186,7 @@ def text_search_mode(index: Index):
             # Perform search
             results = text_search(query, index, top_k)
             
-            if not results:
-                print("No results found")
-            else:
-                print(f"\nTop {len(results)} matches:")
-                for i, (score, path) in enumerate(results, 1):
-                    print(f"{i}. {path} -> {float(score):.4f}")
-                    
+            print_paginated_results(results)
         except ValidationError as e:
             print(f"Validation error: {e}")
         except EOFError:

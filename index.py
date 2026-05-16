@@ -1,7 +1,6 @@
 import numpy as np
-import logging
 import chromadb
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from config import CHROMA_DB_DIR
 from logger import get_logger
 

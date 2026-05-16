@@ -2,7 +2,6 @@ import os
 from logger import setup_logger
 import argparse
 from typing import List, Tuple
-from features import extract_image_features
 from index import Index
 from search import image_search, text_search
 from validation import (

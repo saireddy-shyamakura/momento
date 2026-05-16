@@ -1,6 +1,7 @@
 import logging
 import sys
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 
 # Auto-configure root logger on import
@@ -22,7 +23,7 @@ if not root_logger.handlers:
     console_handler.setFormatter(formatter)
     
     log_file = log_dir / "momento.log"
-    file_handler = logging.FileHandler(log_file)
+    file_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     

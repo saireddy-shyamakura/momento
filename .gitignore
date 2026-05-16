@@ -8,10 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
-image_store.pkl
 
+# Data
 images/
-ToDo.txt
-image_store.json
 chroma_db/
 logs/
+
+# Misc
+ToDo.txt

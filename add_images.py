@@ -1,5 +1,4 @@
 import os
-import logging
 from features import extract_image_features_batch
 from index import Index
 from validation import validate_folder_path, validate_image_path
@@ -32,25 +31,26 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
     paths_to_process = []
     failed = 0
     
-    logger.info(f"Scanning folder: {folder}")
+    logger.info(f"Scanning folder (recursive): {folder}")
     
-    # Collect all candidate image paths first
+    # Collect all candidate image paths recursively
     candidate_paths = []
-    for file in os.listdir(folder):
-        path = os.path.abspath(os.path.join(folder, file))
+    for root, _, files in os.walk(folder):
+        for file in files:
+            path = os.path.abspath(os.path.join(root, file))
 
-        # Skip non-image files
-        if not path.lower().endswith(SUPPORTED_EXTENSIONS):
-            continue
+            # Skip non-image files
+            if not path.lower().endswith(SUPPORTED_EXTENSIONS):
+                continue
 
-        # Validate file before processing
-        is_valid, error_msg = validate_image_path(path)
-        if not is_valid:
-            logger.warning(f"Skipping {file}: {error_msg}")
-            failed += 1
-            continue
+            # Validate file before processing
+            is_valid, error_msg = validate_image_path(path)
+            if not is_valid:
+                logger.warning(f"Skipping {file}: {error_msg}")
+                failed += 1
+                continue
 
-        candidate_paths.append(path)
+            candidate_paths.append(path)
 
     # Bulk check which paths are already indexed (single DB query)
     existing_ids = index.get_existing_ids(candidate_paths)

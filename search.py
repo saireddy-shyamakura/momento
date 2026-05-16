@@ -1,10 +1,11 @@
 from typing import List, Tuple
 from features import extract_image_features, extract_text_features
 from index import Index
+from config import SIMILARITY_THRESHOLD
 from validation import validate_image_path, validate_text_query, ValidationError
 
 
-def _search(query_vector, top_k: int, index: Index, threshold: float = 0.25) -> List[Tuple[float, str]]:
+def _search(query_vector, top_k: int, index: Index, threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[float, str]]:
     """
     Internal search helper.
     
@@ -24,7 +25,7 @@ def _search(query_vector, top_k: int, index: Index, threshold: float = 0.25) -> 
     return [(score, path) for score, path in results if score >= threshold]
 
 
-def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold: float = 0.25) -> List[Tuple[float, str]]:
+def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[float, str]]:
     """
     Search for images similar to a query image.
     
@@ -49,7 +50,7 @@ def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold:
     return _search(query, top_k, index, threshold=threshold)
 
 
-def text_search(text: str, index: Index, top_k: int = 3, threshold: float = 0.25) -> List[Tuple[float, str]]:
+def text_search(text: str, index: Index, top_k: int = 3, threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[float, str]]:
     """
     Search for images matching a text description.
     
@@ -71,7 +72,11 @@ def text_search(text: str, index: Index, top_k: int = 3, threshold: float = 0.25
         raise ValidationError(f"Invalid text query: {error_msg}")
     
     text = text.strip()
-    text = f"a photo of {text}"
+    
+    # Only add prefix if user didn't already provide a natural sentence
+    prefix_words = ("a ", "an ", "the ", "my ", "this ", "some ", "photo ", "picture ", "image ")
+    if not text.lower().startswith(prefix_words):
+        text = f"a photo of {text}"
     
     query = extract_text_features(text).reshape(1, -1)
     return _search(query, top_k, index, threshold=threshold)

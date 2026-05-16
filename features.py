@@ -2,7 +2,6 @@ import torch
 import clip
 from PIL import Image
 import numpy as np
-import logging
 from typing import Tuple, Optional, List
 from config import DEVICE, MODEL_NAME
 from logger import get_logger
@@ -105,9 +104,11 @@ def extract_image_features_batch(image_paths: List[str], batch_size: int = 32) -
     
     successful_paths = []
     all_features = []
+    total_batches = (len(image_paths) + batch_size - 1) // batch_size
     
-    for i in range(0, len(image_paths), batch_size):
+    for batch_num, i in enumerate(range(0, len(image_paths), batch_size), 1):
         batch_paths = image_paths[i:i+batch_size]
+        logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch_paths)} images)...")
         images = []
         current_batch_paths = []
         

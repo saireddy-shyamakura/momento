@@ -4,7 +4,7 @@ from index import Index
 from validation import validate_image_path, validate_text_query, ValidationError
 
 
-def _search(query_vector, top_k: int, index: Index) -> List[Tuple[float, str]]:
+def _search(query_vector, top_k: int, index: Index, threshold: float = 0.25) -> List[Tuple[float, str]]:
     """
     Internal search helper.
     
@@ -12,6 +12,7 @@ def _search(query_vector, top_k: int, index: Index) -> List[Tuple[float, str]]:
         query_vector: Query vector (shape: 1, dim)
         top_k: Number of results
         index: Index instance
+        threshold: Minimum similarity score for a match to be considered valid
         
     Returns:
         List of (score, path) tuples
@@ -19,10 +20,11 @@ def _search(query_vector, top_k: int, index: Index) -> List[Tuple[float, str]]:
     if not index.is_built():
         return []
 
-    return index.search(query_vector, top_k)
+    results = index.search(query_vector, top_k)
+    return [(score, path) for score, path in results if score >= threshold]
 
 
-def image_search(query_image_path: str, index: Index, top_k: int = 3) -> List[Tuple[float, str]]:
+def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold: float = 0.25) -> List[Tuple[float, str]]:
     """
     Search for images similar to a query image.
     
@@ -30,6 +32,7 @@ def image_search(query_image_path: str, index: Index, top_k: int = 3) -> List[Tu
         query_image_path: Path to query image
         index: Index instance
         top_k: Number of top results to return
+        threshold: Minimum similarity score
         
     Returns:
         List of (similarity_score, image_path) tuples
@@ -43,10 +46,10 @@ def image_search(query_image_path: str, index: Index, top_k: int = 3) -> List[Tu
         raise ValidationError(f"Invalid query image: {error_msg}")
     
     query = extract_image_features(query_image_path).reshape(1, -1)
-    return _search(query, top_k, index)
+    return _search(query, top_k, index, threshold=threshold)
 
 
-def text_search(text: str, index: Index, top_k: int = 3) -> List[Tuple[float, str]]:
+def text_search(text: str, index: Index, top_k: int = 3, threshold: float = 0.25) -> List[Tuple[float, str]]:
     """
     Search for images matching a text description.
     
@@ -54,6 +57,7 @@ def text_search(text: str, index: Index, top_k: int = 3) -> List[Tuple[float, st
         text: Text query
         index: Index instance
         top_k: Number of top results to return
+        threshold: Minimum similarity score
         
     Returns:
         List of (similarity_score, image_path) tuples
@@ -70,4 +74,4 @@ def text_search(text: str, index: Index, top_k: int = 3) -> List[Tuple[float, st
     text = f"a photo of {text}"
     
     query = extract_text_features(text).reshape(1, -1)
-    return _search(query, top_k, index)
+    return _search(query, top_k, index, threshold=threshold)

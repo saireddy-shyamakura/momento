@@ -3,8 +3,9 @@ import logging
 import chromadb
 from typing import List, Tuple, Optional
 from config import CHROMA_DB_DIR
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class Index:
     """Manages ChromaDB vector indexing for fast image search with persistent storage."""

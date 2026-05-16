@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Tuple
+from config import SUPPORTED_EXTENSIONS
 
 
 class ValidationError(Exception):
@@ -37,9 +38,8 @@ def validate_image_path(path: str) -> Tuple[bool, str]:
         return False, f"File is not readable: {path}"
     
     # Check file extension
-    valid_extensions = ('.png', '.jpg', '.jpeg')
-    if not path.lower().endswith(valid_extensions):
-        return False, f"Invalid image format. Supported: {', '.join(valid_extensions)}"
+    if not path.lower().endswith(SUPPORTED_EXTENSIONS):
+        return False, f"Invalid image format. Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
     
     # Check file size (avoid extremely large files)
     file_size_mb = os.path.getsize(path) / (1024 * 1024)

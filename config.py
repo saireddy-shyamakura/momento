@@ -4,6 +4,7 @@ import torch
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHROMA_DB_DIR = os.path.join(BASE_DIR, "chroma_db")
 MODEL_NAME = "ViT-B/16"
+SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
 
 def get_device() -> str:
     """

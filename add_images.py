@@ -3,8 +3,10 @@ import logging
 from features import extract_image_features_batch
 from index import Index
 from validation import validate_folder_path, validate_image_path
+from config import SUPPORTED_EXTENSIONS
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
     """
@@ -37,7 +39,7 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
         path = os.path.abspath(os.path.join(folder, file))
 
         # Skip non-image files
-        if not path.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if not path.lower().endswith(SUPPORTED_EXTENSIONS):
             continue
 
         # Skip already indexed files

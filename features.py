@@ -5,8 +5,9 @@ import numpy as np
 import logging
 from typing import Tuple, Optional, List
 from config import DEVICE, MODEL_NAME
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _model: Optional[torch.nn.Module] = None
 _preprocess: Optional[callable] = None

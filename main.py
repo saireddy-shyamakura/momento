@@ -1,5 +1,5 @@
 import os
-import logging
+from logger import setup_logger
 import argparse
 from typing import List, Tuple
 from features import extract_image_features
@@ -11,12 +11,7 @@ from validation import (
 )
 from add_images import add_images
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 def main():
@@ -70,6 +65,9 @@ def main():
                 elif choice == "3":
                     add_images_mode(index)
 
+            except KeyboardInterrupt:
+                print("\nGoodbye!")
+                break
             except EOFError:
                 print("\nGoodbye!")
                 break
@@ -85,7 +83,7 @@ def main():
 def print_paginated_results(results: List[Tuple[float, str]], page_size: int = 10):
     """Print search results with simple pagination."""
     if not results:
-        print("No results found")
+        print("\nNo relevant results found (all matches were below the similarity threshold).")
         return
         
     total = len(results)
@@ -97,8 +95,12 @@ def print_paginated_results(results: List[Tuple[float, str]], page_size: int = 1
             print(f"{j}. {path} -> {float(score):.4f}")
             
         if i + page_size < total:
-            cont = input("\nPress Enter to see more results, or 'q' to quit: ").strip().lower()
-            if cont == 'q':
+            try:
+                cont = input("\nPress Enter to see more results, or 'q' to quit: ").strip().lower()
+                if cont == 'q':
+                    break
+            except KeyboardInterrupt:
+                print() # Print newline to keep formatting clean
                 break
 
 
@@ -142,6 +144,9 @@ def image_search_mode(index: Index):
             print_paginated_results(results)
         except ValidationError as e:
             print(f"Validation error: {e}")
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
         except EOFError:
             break
         except Exception as e:
@@ -189,6 +194,9 @@ def text_search_mode(index: Index):
             print_paginated_results(results)
         except ValidationError as e:
             print(f"Validation error: {e}")
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
         except EOFError:
             break
         except Exception as e:
@@ -215,6 +223,9 @@ def add_images_mode(index: Index):
             print(f"Current database size: {index.get_vector_count()} images.")
             break
             
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
         except EOFError:
             break
         except Exception as e:

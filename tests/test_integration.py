@@ -50,17 +50,10 @@ def test_integration_add_and_search(integration_images, integration_index):
     assert num_added > 0
     assert integration_index.get_vector_count() == num_added
     
-    # Search for a common term, like 'image' or 'photo' or 'cat' depending on dataset.
-    # Since we don't know the exact images, 'photo' is a good generic term.
-    # We could also use threshold=0.0 to ensure it returns something.
-    # But requirement says "score >= SIMILARITY_THRESHOLD". If we use a generic enough term...
-    # Let's search for "object" and drop threshold to 0.1 to be safe, 
-    # or just use default SIMILARITY_THRESHOLD and hope the generic query matches.
-    # Actually, we can just use "a picture" which matches everything.
-    results = text_search("a picture", integration_index, top_k=1, threshold=0.0)
+    results = text_search("a picture", integration_index, top_k=1, threshold=SIMILARITY_THRESHOLD)
     
     assert len(results) > 0
-    assert results[0][0] >= 0.0  # Just verify it returns a valid score format
+    assert results[0][0] >= SIMILARITY_THRESHOLD
 
 def test_integration_add_images_idempotency(integration_images, integration_index):
     """Test: calling add_images() twice on the same folder leaves get_vector_count() unchanged."""

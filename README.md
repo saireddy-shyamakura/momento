@@ -10,7 +10,9 @@ A semantic image search engine powered by **OpenAI CLIP** and **ChromaDB**. Sear
 - **Persistent Vector Store** — Uses ChromaDB for durable, on-disk storage (no re-encoding on restart)
 - **Auto Device Detection** — Automatically uses CUDA, Apple Silicon (MPS), or CPU
 - **Similarity Threshold** — Filters out irrelevant results below a configurable confidence score
+- **Progress Bar** — Visual progress during batch indexing (requires `tqdm`)
 - **Paginated Results** — Large result sets are displayed page-by-page
+- **Concurrency Lock** — Prevents multiple instances from corrupting the index simultaneously
 
 ## Requirements
 
@@ -19,6 +21,10 @@ A semantic image search engine powered by **OpenAI CLIP** and **ChromaDB**. Sear
 - `clip` (OpenAI CLIP)
 - `chromadb`
 - `Pillow`
+- `platformdirs`
+
+Optional:
+- `tqdm` — for progress bars during indexing (`uv sync --extra progress`)
 
 ## Installation
 
@@ -32,6 +38,9 @@ pip install uv
 git clone https://github.com/your-username/momento.git
 cd momento
 uv sync
+
+# With progress bar support
+uv sync --extra progress
 ```
 
 ## Usage
@@ -40,18 +49,24 @@ uv sync
 
 ```bash
 # Index a folder and start searching
-uv run main.py --dir ~/Pictures
+uv run momento --dir ~/Pictures
 
-# Or just start (indexes ./images/ by default if it exists)
-uv run main.py
+# Or just start the interactive menu
+uv run momento
 ```
 
-### CLI Options
+### CLI Flags
 
 | Flag | Description |
 |------|-------------|
-| `--dir`, `-d` | Directory containing images to index on startup |
-| `-h`, `--help` | Show help message |
+| `--dir`, `-d PATH` | Directory containing images to index on startup |
+| `--version` | Print version and exit |
+| `--reset` | Delete all indexed entries and exit |
+| `--count` | Print number of currently indexed images and exit |
+| `--verify` | Scan the index and remove entries whose files no longer exist on disk |
+| `--threshold FLOAT` | Override the similarity threshold for this session (0.0–1.0, default 0.20) |
+| `--open` | After each search, automatically open the top result in the system image viewer |
+| `-h`, `--help` | Show help message and exit |
 
 ### Interactive Menu
 
@@ -66,7 +81,7 @@ Once running, you'll see:
 Choice (1, 2, 3, or 'q' to quit):
 ```
 
-- **Option 1** — Provide a path to a query image and find similar ones in your index
+- **Option 1** — Provide a path to a query image and find visually similar ones in your index
 - **Option 2** — Type a text description (e.g., "sunset over mountains") to find matching images
 - **Option 3** — Add more images from any directory without restarting
 
@@ -78,20 +93,34 @@ Choice (1, 2, 3, or 'q' to quit):
 
 ```
 momento/
-├── main.py          # CLI entry point and interactive menu
-├── config.py        # Device detection, paths, constants
-├── features.py      # CLIP model loading and feature extraction (single + batch)
-├── index.py         # ChromaDB vector store (add, search, bulk existence check)
-├── search.py        # Image and text search with similarity thresholds
-├── add_images.py    # Directory scanning and batch ingestion pipeline
-├── validation.py    # Input validation helpers
-├── logger.py        # Centralized logging (console + file)
-└── pyproject.toml   # Dependencies and project metadata
+├── pyproject.toml               # Dependencies, entry point, build config
+├── src/
+│   └── momento/
+│       ├── __init__.py          # Package version
+│       ├── cli.py               # Entry point: argument parsing, interactive menu, lock acquire/release
+│       ├── lock.py              # LockFile: prevents concurrent processes
+│       ├── config.py            # Device detection, paths, constants (uses platformdirs)
+│       ├── features.py          # CLIP model loading and feature extraction (single + batch)
+│       ├── index.py             # ChromaDB vector store (add, search, bulk existence check)
+│       ├── search.py            # Image and text search with similarity thresholds
+│       ├── add_images.py        # Directory scanning and batch ingestion pipeline
+│       ├── validation.py        # Input validation helpers
+│       ├── output.py            # Result rendering: format_bar(), render_result(), open_file()
+│       └── logger.py            # Centralized logging (console + rotating file)
+└── tests/
+    ├── test_add_images.py
+    ├── test_config.py
+    ├── test_index.py
+    ├── test_integration.py      # End-to-end pipeline tests (marked @pytest.mark.slow)
+    ├── test_output.py
+    ├── test_search.py
+    └── test_validation.py
 ```
 
-**Model:** OpenAI CLIP `ViT-B/16`
-**Vector Store:** ChromaDB with cosine similarity (persistent on-disk)
-**Logging:** Console (INFO) + file at `logs/momento.log` (DEBUG)
+**Model:** OpenAI CLIP `ViT-B/16`  
+**Vector Store:** ChromaDB with cosine similarity (persistent on-disk)  
+**Data Directory:** `~/.local/share/momento/` (Linux/macOS) / `%APPDATA%\momento\` (Windows)  
+**Logging:** Console (INFO) + rotating file at `~/.local/share/momento/logs/momento.log` (DEBUG)
 
 ## Configuration
 
@@ -108,7 +137,21 @@ Key constants in `config.py`:
 ```python
 MODEL_NAME = "ViT-B/16"
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
+SIMILARITY_THRESHOLD = 0.20
 ```
 
-The similarity threshold (default `0.25`) can be adjusted in `search.py` to control result relevance.
+The similarity threshold can be overridden per-session with `--threshold`:
 
+```bash
+uv run momento --threshold 0.30
+```
+
+## Running Tests
+
+```bash
+# Fast unit + property tests (skip slow integration tests)
+uv run pytest tests/ -v -m "not slow"
+
+# Full suite including integration tests (requires real images in ./images/)
+uv run pytest tests/ -v
+```

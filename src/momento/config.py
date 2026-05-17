@@ -1,13 +1,23 @@
 import os
 import torch
+import platformdirs
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CHROMA_DB_DIR = os.path.join(BASE_DIR, "chroma_db")
+from .logger import get_logger
+
+# Package-internal reference (for bundled assets only — NOT for user data)
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# User-facing data directory: ~/.local/share/momento  (XDG on Linux/Mac, %APPDATA% on Windows)
+_DATA_DIR = platformdirs.user_data_dir("momento", appauthor=False)
+CHROMA_DB_DIR = os.path.join(_DATA_DIR, "chroma_db")
+LOG_DIR = os.path.join(_DATA_DIR, "logs")
+
+# Keep BASE_DIR as an alias for any code still referencing it (e.g. lock file path)
+BASE_DIR = _DATA_DIR
+
 MODEL_NAME = "ViT-B/16"
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
 SIMILARITY_THRESHOLD = 0.20
-
-from .logger import get_logger
 
 logger = get_logger(__name__)
 

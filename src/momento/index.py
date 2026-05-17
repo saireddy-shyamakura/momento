@@ -121,6 +121,21 @@ class Index:
         if ids:
             self.collection.delete(ids=ids)
 
+    def delete_paths(self, paths: List[str]) -> int:
+        """
+        Remove specific paths from the index.
+
+        Args:
+            paths: List of file paths to delete (must match stored IDs exactly).
+
+        Returns:
+            Number of entries removed.
+        """
+        if not paths:
+            return 0
+        self.collection.delete(ids=paths)
+        return len(paths)
+
     def get_all_paths(self) -> List[str]:
         """Return every stored path (used by --verify)."""
         result = self.collection.get()

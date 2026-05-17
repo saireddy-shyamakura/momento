@@ -33,7 +33,7 @@ def verify_index(index: Index) -> int:
     paths = index.get_all_paths()
     stale = [p for p in paths if not os.path.exists(p)]
     if stale:
-        index.collection.delete(ids=stale)
+        index.delete_paths(stale)
         print(f"Removed {len(stale)} stale entries.")
     else:
         print("Index is clean — no stale entries found.")

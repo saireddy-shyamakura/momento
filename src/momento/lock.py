@@ -5,9 +5,11 @@ logger = logging.getLogger(__name__)
 
 class LockFile:
     def __init__(self, path: str):
+        """Initialize the LockFile with the given path."""
         self.path = path
 
     def _pid_alive(self, pid: int) -> bool:
+        """Check if a process with the given PID is currently running."""
         try:
             os.kill(pid, 0)
             return True
@@ -18,6 +20,10 @@ class LockFile:
             return True
 
     def acquire(self) -> bool:
+        """
+        Attempt to acquire the lock. Returns True if successful, False otherwise.
+        Automatically cleans up stale locks from dead processes.
+        """
         if os.path.exists(self.path):
             try:
                 with open(self.path, 'r') as f:
@@ -42,6 +48,7 @@ class LockFile:
             return False
 
     def release(self) -> None:
+        """Release the lock if it exists."""
         if os.path.exists(self.path):
             try:
                 os.remove(self.path)

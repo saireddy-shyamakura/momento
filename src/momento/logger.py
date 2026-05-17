@@ -3,10 +3,12 @@ import sys
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
+# Import LOG_DIR lazily to avoid circular imports
+# config imports logger, so we compute the path independently here
+import platformdirs as _pd
 
-# Auto-configure root logger on import
-log_dir = Path(__file__).parent / "logs"
-log_dir.mkdir(exist_ok=True)
+log_dir = Path(_pd.user_data_dir("momento", appauthor=False)) / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
 
 formatter = logging.Formatter(
     fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

@@ -13,12 +13,13 @@ dependencies = [
     "chromadb>=1.5.9",
     "clip",
     "pillow>=12.2.0",
+    "platformdirs>=4.0",
     "torch>=2.12.0",
     "torchvision>=0.27.0",
+    "tqdm>=4.0",
 ]
 
-[project.optional-dependencies]
-progress = ["tqdm>=4.0"]
+
 
 [project.scripts]
 momento = "momento.cli:main"
@@ -38,6 +39,7 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = ["slow: marks tests as slow, e.g. integration tests that load the CLIP model (deselect with -m 'not slow')"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

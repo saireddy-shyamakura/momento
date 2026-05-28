@@ -5,7 +5,8 @@ from .config import SIMILARITY_THRESHOLD
 from .validation import validate_image_path, validate_text_query, ValidationError
 
 
-def _search(query_vector, top_k: int, index: Index, threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[float, str]]:
+def _search(query_vector, top_k: int, index: Index, threshold: float = SIMILARITY_THRESHOLD,
+            use_aggregation: bool = False) -> List[Tuple[float, str]]:
     """
     Internal search helper.
     
@@ -14,6 +15,7 @@ def _search(query_vector, top_k: int, index: Index, threshold: float = SIMILARIT
         top_k: Number of results
         index: Index instance
         threshold: Minimum similarity score for a match to be considered valid
+        use_aggregation: If True, aggregate scores across composite IDs
         
     Returns:
         List of (score, path) tuples
@@ -21,11 +23,17 @@ def _search(query_vector, top_k: int, index: Index, threshold: float = SIMILARIT
     if not index.is_built():
         return []
 
-    results = index.search(query_vector, top_k)
-    return [(score, path) for score, path in results if score >= threshold]
+    if use_aggregation:
+        results = index.search_aggregated(query_vector, top_k)
+        return [(score, path) for score, path in results if score >= threshold]
+
+    raw = index.search(query_vector, top_k)
+    return [(score, entry_id) for score, entry_id in raw if score >= threshold]
 
 
-def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[float, str]]:
+def image_search(query_image_path: str, index: Index, top_k: int = 3,
+                 threshold: float = SIMILARITY_THRESHOLD,
+                 use_aggregation: bool = False) -> List[Tuple[float, str]]:
     """
     Search for images similar to a query image.
     
@@ -34,6 +42,7 @@ def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold:
         index: Index instance
         top_k: Number of top results to return
         threshold: Minimum similarity score
+        use_aggregation: Aggregate multi-vector scores
         
     Returns:
         List of (similarity_score, image_path) tuples
@@ -47,10 +56,12 @@ def image_search(query_image_path: str, index: Index, top_k: int = 3, threshold:
         raise ValidationError(f"Invalid query image: {error_msg}")
     
     query = extract_image_features(query_image_path).reshape(1, -1)
-    return _search(query, top_k, index, threshold=threshold)
+    return _search(query, top_k, index, threshold=threshold, use_aggregation=use_aggregation)
 
 
-def text_search(text: str, index: Index, top_k: int = 3, threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[float, str]]:
+def text_search(text: str, index: Index, top_k: int = 3,
+                threshold: float = SIMILARITY_THRESHOLD,
+                use_aggregation: bool = False) -> List[Tuple[float, str]]:
     """
     Search for images matching a text description.
     
@@ -59,6 +70,7 @@ def text_search(text: str, index: Index, top_k: int = 3, threshold: float = SIMI
         index: Index instance
         top_k: Number of top results to return
         threshold: Minimum similarity score
+        use_aggregation: Aggregate multi-vector scores
         
     Returns:
         List of (similarity_score, image_path) tuples
@@ -79,4 +91,4 @@ def text_search(text: str, index: Index, top_k: int = 3, threshold: float = SIMI
         text = f"a photo of {text}"
     
     query = extract_text_features(text).reshape(1, -1)
-    return _search(query, top_k, index, threshold=threshold)
+    return _search(query, top_k, index, threshold=threshold, use_aggregation=use_aggregation)

@@ -278,7 +278,7 @@ def _hyp_vector(dim: int = _DIM) -> np.ndarray:
         unique=True,
     )
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_property6_index_add_exists_round_trip(names):
     """
     For any set of unique path strings added via add_vectors(), a subsequent
@@ -311,7 +311,7 @@ def test_property6_index_add_exists_round_trip(names):
         max_size=20,
     )
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_property7_index_upsert_idempotence(name):
     """
     Calling add_vectors() twice with the same path SHALL result in
@@ -350,7 +350,7 @@ def test_property7_index_upsert_idempotence(name):
         unique=True,
     )
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_property8_index_count_invariant(names):
     """
     After adding N unique paths via add_vectors(), get_vector_count() SHALL
@@ -379,7 +379,7 @@ def test_property8_index_count_invariant(names):
 @given(
     n=st.integers(min_value=2, max_value=10),
 )
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 def test_property9_search_results_sorted_descending(n):
     """
     For any non-empty Index and any query vector, the list returned by

@@ -1,157 +1,265 @@
 # Momento
 
-A semantic image search engine powered by **OpenAI CLIP** and **ChromaDB**. Search your local image library using natural language descriptions or find visually similar images — all running locally on your machine.
+A local, multi-modal semantic search engine built on **OpenAI CLIP** and **ChromaDB**. Momento enables powerful image and video search entirely on your machine, with no cloud dependencies.
 
 ## Features
 
-- **Text-to-Image Search** — Describe what you're looking for in plain English and find matching images
-- **Image-to-Image Search** — Query with an image to find visually similar ones
-- **Batch Ingestion** — Efficiently indexes entire directories using batched GPU/CPU processing
-- **Persistent Vector Store** — Uses ChromaDB for durable, on-disk storage (no re-encoding on restart)
-- **Auto Device Detection** — Automatically uses CUDA, Apple Silicon (MPS), or CPU
-- **Similarity Threshold** — Filters out irrelevant results below a configurable confidence score
-- **Progress Bar** — Visual progress during batch indexing (requires `tqdm`)
-- **Paginated Results** — Large result sets are displayed page-by-page
-- **Concurrency Lock** — Prevents multiple instances from corrupting the index simultaneously
+- **Image-to-Image Search** — find visually similar images from a query image
+- **Text-to-Image Search** — describe a scene and find matching media
+- **Multi-Embedding Augmentation** — index 5 augmented views per image (flip, crop, brightness, contrast, rotate) for better recall
+- **Video Keyframe Indexing** — extract and index frames from video files
+- **YOLO Object Detection** — detect and embed individual object crops for fine-grained search
+- **OCR Text Extraction** — extract on-image text and index it for text-based search
+- **Parallel Execution** — Videos, Objects, and OCR features run concurrently for 2-4x faster indexing
+- **Automatic Device Selection** — CUDA (NVIDIA), MPS (Apple Silicon), or CPU with OOM fallback
+- **Crash Recovery** — checkpoint/resume so interrupted indexing picks up where it left off
+- **Graceful Shutdown** — SIGINT/SIGTERM handlers complete the current batch before exiting
+- **Structured Logging** — JSON log format with timing and event tracking
+- **Embedding Cache** — LRU-evicted cache to speed up re-indexing
 
 ## Requirements
 
 - Python 3.12+
-- `torch`, `torchvision`
+- `torch` + `torchvision`
 - `clip` (OpenAI CLIP)
-- `chromadb`
+- `chromadb` (vector store)
 - `Pillow`
 - `platformdirs`
+- `tenacity` (retry logic)
+- `psutil` (memory monitoring)
 
-Optional:
-- `tqdm` — for progress bars during indexing (`uv sync --extra progress`)
+Optional dependencies (enable extra features):
+
+| Dependency | Feature | Install |
+|-----------|---------|---------|
+| `opencv-python-headless` | Video keyframe extraction | `pip install opencv-python-headless` |
+| `ultralytics` | YOLO object detection | `pip install ultralytics` |
+| `easyocr` | OCR text extraction | `pip install easyocr` |
+| `tqdm` | Progress bars during indexing | `pip install tqdm` |
 
 ## Installation
 
-This project uses [`uv`](https://docs.astral.sh/uv/) to manage the environment and dependencies.
+### Using uv (recommended)
 
 ```bash
-# Install uv if needed
 pip install uv
-
-# Clone and sync
 git clone https://github.com/your-username/momento.git
 cd momento
 uv sync
-
-# With progress bar support
-uv sync --extra progress
 ```
 
-## Usage
-
-### Quick Start
+### Using pip
 
 ```bash
-# Index a folder and start searching
-uv run momento --dir ~/Pictures
-
-# Or just start the interactive menu
-uv run momento
+pip install .
 ```
 
-### CLI Flags
+## Quick Start
+
+Index your photo library and start searching:
+
+```bash
+momento --dir ~/Pictures
+```
+
+Start the interactive menu without auto-indexing:
+
+```bash
+momento
+```
+
+## CLI Reference
+
+### Main Commands
+
+| Command | Description |
+|---------|-------------|
+| `momento` | Interactive menu — index or search |
+| `momento --dir PATH` | Index a folder and start interactive search |
+| `momento doctor` | Run system health check |
+| `momento stats` | Show detailed index statistics |
+| `momento benchmark` | Run performance benchmarks |
+| `momento export --format npz -o export.npz` | Export all index data |
+| `momento import --from export.npz` | Import index data from file |
+
+### Utility Flags
 
 | Flag | Description |
 |------|-------------|
-| `--dir`, `-d PATH` | Directory containing images to index on startup |
 | `--version` | Print version and exit |
 | `--reset` | Delete all indexed entries and exit |
-| `--count` | Print number of currently indexed images and exit |
-| `--verify` | Scan the index and remove entries whose files no longer exist on disk |
-| `--threshold FLOAT` | Override the similarity threshold for this session (0.0–1.0, default 0.20) |
-| `--open` | After each search, automatically open the top result in the system image viewer |
-| `-h`, `--help` | Show help message and exit |
+| `--count` | Print number of indexed vectors and exit |
+| `--verify` | Remove stale entries whose source files no longer exist |
+| `--cache-clean` | Delete all cached embeddings to free disk space |
 
-### Interactive Menu
+### Workflow Flags
 
-Once running, you'll see:
+| Flag | Description |
+|------|-------------|
+| `--dir`, `-d PATH` | Directory containing media to index |
+| `--threshold FLOAT` | Similarity threshold (0.0–1.0, default 0.20) |
+| `--open` | Open top search result in system viewer |
+| `--output json` | Output results as JSON (machine-readable) |
+| `--dry-run` | Scan folder and show what would be indexed, then exit |
+| `--exclude "*.txt,private/"` | Comma-separated glob patterns to exclude |
 
-```
-=== Image Search Engine ===
-1. Image search (find similar images)
-2. Text search (search by description)
-3. Index new images from directory
+### Logging Flags
 
-Choice (1, 2, 3, or 'q' to quit):
-```
+| Flag | Description |
+|------|-------------|
+| `--log-format text\|json` | Log output format (default: text) |
+| `--quiet` | Suppress non-essential output (WARNING level) |
+| `--verbose` | Enable verbose logging (DEBUG level) |
+| `--debug` | Enable debug logging (most verbose) |
 
-- **Option 1** — Provide a path to a query image and find visually similar ones in your index
-- **Option 2** — Type a text description (e.g., "sunset over mountains") to find matching images
-- **Option 3** — Add more images from any directory without restarting
+### Deprecated Flags
 
-### Supported Formats
+The following flags from v1 are deprecated. All features are now enabled by default:
+`--multi-embed`, `--include-video`, `--yolo`, `--ocr`, `--all-features`
 
-`.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`
+### Configuration
 
-## Architecture
-
-```
-momento/
-├── pyproject.toml               # Dependencies, entry point, build config
-├── src/
-│   └── momento/
-│       ├── __init__.py          # Package version
-│       ├── cli.py               # Entry point: argument parsing, interactive menu, lock acquire/release
-│       ├── lock.py              # LockFile: prevents concurrent processes
-│       ├── config.py            # Device detection, paths, constants (uses platformdirs)
-│       ├── features.py          # CLIP model loading and feature extraction (single + batch)
-│       ├── index.py             # ChromaDB vector store (add, search, bulk existence check)
-│       ├── search.py            # Image and text search with similarity thresholds
-│       ├── add_images.py        # Directory scanning and batch ingestion pipeline
-│       ├── validation.py        # Input validation helpers
-│       ├── output.py            # Result rendering: format_bar(), render_result(), open_file()
-│       └── logger.py            # Centralized logging (console + rotating file)
-└── tests/
-    ├── test_add_images.py
-    ├── test_config.py
-    ├── test_index.py
-    ├── test_integration.py      # End-to-end pipeline tests (marked @pytest.mark.slow)
-    ├── test_output.py
-    ├── test_search.py
-    └── test_validation.py
-```
-
-**Model:** OpenAI CLIP `ViT-B/16`  
-**Vector Store:** ChromaDB with cosine similarity (persistent on-disk)  
-**Data Directory:** `~/.local/share/momento/` (Linux/macOS) / `%APPDATA%\momento\` (Windows)  
-**Logging:** Console (INFO) + rotating file at `~/.local/share/momento/logs/momento.log` (DEBUG)
-
-## Configuration
-
-Device detection is fully automatic in `config.py`:
+Momento automatically selects the best device:
 
 | Hardware | Device |
 |----------|--------|
 | NVIDIA GPU | `cuda` |
 | Apple Silicon | `mps` |
-| Everything else | `cpu` |
+| Otherwise | `cpu` |
 
-Key constants in `config.py`:
-
-```python
-MODEL_NAME = "ViT-B/16"
-SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
-SIMILARITY_THRESHOLD = 0.20
-```
-
-The similarity threshold can be overridden per-session with `--threshold`:
+Override with `MOMENTO_DEVICE`:
 
 ```bash
-uv run momento --threshold 0.30
+MOMENTO_DEVICE=cpu momento --dir ~/Pictures
 ```
+
+### Subcommands
+
+#### `momento config show`
+
+Display the current configuration.
+
+#### `momento config set <key> <value>`
+
+Update a configuration value and save it to `~/.config/momento/config.toml`.
+
+Example:
+```bash
+momento config set threshold 0.30
+momento config set yolo_model yolov8m.pt
+```
+
+#### `momento doctor`
+
+Run a comprehensive system health check covering:
+- Python and Momento versions
+- Device (CUDA/MPS/CPU)
+- CLIP model availability
+- ChromaDB accessibility
+- Disk space
+- GPU availability
+- Required and optional dependency status
+
+#### `momento stats`
+
+Display detailed index statistics:
+- Total vectors and entries
+- Per-type breakdown (images, videos, objects, OCR)
+- Database size on disk
+- Database path
+
+#### `momento benchmark`
+
+Run performance benchmarks:
+- Embedding extraction latency
+- Search latency (requires non-empty index)
+- Batch throughput estimate
+
+#### `momento export`
+
+Export all index data to a file for backup or migration:
+
+```bash
+momento export --format npz -o my_index_backup.npz
+momento export --format json -o my_index_backup.json
+```
+
+#### `momento import`
+
+Import index data from a previously exported file:
+
+```bash
+momento import --from my_index_backup.npz
+```
+
+## Supported File Formats
+
+- **Images**: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`
+- **Videos**: `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`, `.flv`
+
+## Architecture
+
+```
+src/momento/
+├── __init__.py         # Package metadata and version
+├── app_controller.py   # Main application orchestrator
+├── cli.py              # Command-line interface
+├── config.py           # Central configuration with TOML support
+├── index.py            # ChromaDB vector store wrapper
+├── indexer.py          # Indexing orchestrator (parallel execution)
+├── features.py         # CLIP model and feature extraction
+├── add_images.py       # Image ingestion pipeline with cache
+├── augment.py          # Image augmentation transforms
+├── video.py            # Video keyframe extraction
+├── yolo.py             # YOLO object detection
+├── ocr.py              # OCR text extraction
+├── ingest.py           # Unified media ingestion pipeline
+├── search.py           # Query search logic
+├── query_manager.py    # Interactive query interface
+├── output.py           # Result rendering utilities
+├── file_picker.py      # Folder selection UI with disk space estimation
+├── validation.py       # Path and input validation with symlink safety
+├── device.py           # Device (CPU/CUDA/MPS) management
+├── cache.py            # Embedding cache with LRU eviction
+├── diagnostics.py      # Health checks, stats, benchmarks
+├── error_handler.py    # Error aggregation and formatting
+├── index_utils.py      # Index utility functions
+├── lock.py             # Process lock with TTL
+├── logger.py           # Structured logging (text/JSON)
+└── shutdown.py         # Graceful shutdown handling
+```
+
+### Key Design Principles
+
+1. **Error Isolation** — one feature failure doesn't stop others
+2. **Graceful Degradation** — falls back to CPU on GPU OOM
+3. **Crash Recovery** — checkpoint/resume for long indexing operations
+4. **Parallel Execution** — independent features run concurrently
+5. **Path Safety** — symlink traversal protection via `os.path.realpath()`
+6. **Retry Logic** — ChromaDB operations retry with exponential backoff
 
 ## Running Tests
 
 ```bash
-# Fast unit + property tests (skip slow integration tests)
-uv run pytest tests/ -v -m "not slow"
-
-# Full suite including integration tests (requires real images in ./images/)
-uv run pytest tests/ -v
+pytest tests/ -v
 ```
+
+Skip slow integration tests:
+
+```bash
+pytest tests/ -v -m "not slow"
+```
+
+Run with coverage:
+
+```bash
+pytest --cov=src/momento --cov-report=term-missing
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture overview, and pull request guidelines.
+
+## Code of Conduct
+
+This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.

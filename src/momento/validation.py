@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Tuple
-from .config import SUPPORTED_EXTENSIONS
+from .config import SUPPORTED_EXTENSIONS, SUPPORTED_VIDEO_EXTENSIONS
 
 
 class ValidationError(Exception):
@@ -47,6 +47,51 @@ def validate_image_path(path: str) -> Tuple[bool, str]:
         return False, f"File too large ({file_size_mb:.1f}MB). Max: 500MB"
     
     return True, ""
+
+
+def validate_video_path(path: str) -> Tuple[bool, str]:
+    """
+    Validate that a path is a valid, readable video file.
+
+    Args:
+        path: Path to validate
+
+    Returns:
+        Tuple of (is_valid, error_message).
+    """
+    if not path or not path.strip():
+        return False, "Video path cannot be empty"
+
+    path = path.strip()
+
+    if not os.path.exists(path):
+        return False, f"File not found: {path}"
+
+    if not os.path.isfile(path):
+        return False, f"Path is not a file: {path}"
+
+    if not os.access(path, os.R_OK):
+        return False, f"File is not readable: {path}"
+
+    if not path.lower().endswith(SUPPORTED_VIDEO_EXTENSIONS):
+        return False, f"Invalid video format. Supported: {', '.join(SUPPORTED_VIDEO_EXTENSIONS)}"
+
+    file_size_mb = os.path.getsize(path) / (1024 * 1024)
+    if file_size_mb > 5000:
+        return False, f"File too large ({file_size_mb:.1f}MB). Max: 5GB"
+
+    return True, ""
+
+
+def validate_media_path(path: str) -> Tuple[bool, str]:
+    """Validate an image or video path."""
+    img_ok, _ = validate_image_path(path)
+    if img_ok:
+        return True, ""
+    vid_ok, _ = validate_video_path(path)
+    if vid_ok:
+        return True, ""
+    return False, f"Unsupported file. Supported images: {', '.join(SUPPORTED_EXTENSIONS)}, videos: {', '.join(SUPPORTED_VIDEO_EXTENSIONS)}"
 
 
 def validate_text_query(text: str) -> Tuple[bool, str]:
@@ -116,6 +161,34 @@ def validate_positive_int(value: int, name: str = "value") -> Tuple[bool, str]:
         return False, f"{name} exceeds maximum (100)"
     
     return True, ""
+
+
+def is_path_safe(file_path: str, base_folder: str) -> Tuple[bool, str]:
+    """Check that a file path does not escape its base folder via symlinks.
+
+    Resolves symlinks with os.path.realpath() and verifies the resolved
+    path is inside base_folder. This prevents path traversal attacks
+    where a symlink like ``Pictures/../../etc/passwd`` would otherwise
+    be followed.
+
+    Args:
+        file_path: Absolute path to the candidate file.
+        base_folder: Absolute path to the allowed parent folder.
+
+    Returns:
+        Tuple of (is_safe, error_message).
+    """
+    try:
+        resolved_file = os.path.realpath(file_path)
+        resolved_base = os.path.realpath(base_folder)
+
+        if not resolved_file.startswith(resolved_base + os.sep):
+            return (False,
+                    f"Path resolves outside the indexed folder: "
+                    f"{file_path} → {resolved_file}")
+        return True, ""
+    except (OSError, ValueError) as e:
+        return False, f"Cannot resolve path {file_path}: {e}"
 
 
 def validate_choice(choice: str, valid_options: list) -> Tuple[bool, str]:

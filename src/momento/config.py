@@ -33,6 +33,7 @@ BASE_DIR = _DATA_DIR
 
 # ── CLIP model ────────────────────────────────────────────────────────
 MODEL_NAME = "ViT-B/16"
+SUPPORTED_MODELS = ("ViT-B/32", "ViT-B/16", "ViT-L/14", "ViT-L/14@336px", "ConvNeXt-B")
 SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp')
 SIMILARITY_THRESHOLD = 0.20
 
@@ -89,6 +90,9 @@ class MomentoConfig:
 
     Can be serialised to/from a TOML config file.
     """
+    # Embedding model
+    model_name: str = MODEL_NAME
+    
     # Feature toggles
     enable_multi_embed: bool = ENABLE_MULTI_EMBED
     enable_video_indexing: bool = ENABLE_VIDEO_INDEXING
@@ -132,7 +136,12 @@ def _get_config_path() -> str:
 
 
 def load_config() -> MomentoConfig:
-    """Load configuration from the TOML config file, falling back to defaults.
+    """Load configuration from TOML file, environment variables, and defaults.
+
+    Priority order (highest to lowest):
+    1. Environment variables (MOMENTO_* prefix)
+    2. TOML config file at ~/.config/momento/config.toml
+    3. Hardcoded defaults
 
     The TOML file at ``~/.config/momento/config.toml`` is read if it exists.
     Missing or invalid keys fall back to their default values silently.
@@ -143,26 +152,55 @@ def load_config() -> MomentoConfig:
     config = MomentoConfig()
     config_path = _get_config_path()
 
-    if not os.path.exists(config_path):
-        return config
+    # Load from TOML file first
+    if os.path.exists(config_path):
+        try:
+            import tomllib
+            with open(config_path, "rb") as f:
+                data = tomllib.load(f)
 
-    try:
-        import tomllib
-        with open(config_path, "rb") as f:
-            data = tomllib.load(f)
+            # Map TOML sections to dataclass fields
+            for section_name in ("embedding", "features", "similarity", "indexing", "video",
+                                 "yolo", "ocr", "augmentation", "cache", "logging"):
+                section = data.get(section_name, {})
+                if not isinstance(section, dict):
+                    continue
+                for key, value in section.items():
+                    # Convert TOML key names (e.g., "enable_multi_embed") to dataclass fields
+                    if hasattr(config, key):
+                        setattr(config, key, value)
+        except (Exception, OSError, ValueError) as e:
+            logger.warning(f"Failed to load config file {config_path}: {e}")
 
-        # Map TOML sections to dataclass fields
-        for section_name in ("features", "similarity", "indexing", "video",
-                             "yolo", "ocr", "augmentation", "cache", "logging"):
-            section = data.get(section_name, {})
-            if not isinstance(section, dict):
-                continue
-            for key, value in section.items():
-                # Convert TOML key names (e.g., "enable_multi_embed") to dataclass fields
-                if hasattr(config, key):
-                    setattr(config, key, value)
-    except (tomllib.TOMLDecodeError, OSError, ValueError) as e:
-        logger.warning(f"Failed to load config file {config_path}: {e}")
+    # Override with environment variables (highest priority)
+    _ENV_MAPPING = {
+        "MOMENTO_MODEL_NAME": ("model_name", str),
+        "MOMENTO_ENABLE_MULTI_EMBED": ("enable_multi_embed", lambda x: x.lower() in ("true", "1", "yes")),
+        "MOMENTO_ENABLE_VIDEO_INDEXING": ("enable_video_indexing", lambda x: x.lower() in ("true", "1", "yes")),
+        "MOMENTO_ENABLE_YOLO": ("enable_yolo", lambda x: x.lower() in ("true", "1", "yes")),
+        "MOMENTO_ENABLE_OCR": ("enable_ocr", lambda x: x.lower() in ("true", "1", "yes")),
+        "MOMENTO_DEVICE": ("device", str),
+        "MOMENTO_SIMILARITY_THRESHOLD": ("similarity_threshold", float),
+        "MOMENTO_MAX_SEARCH_RESULTS": ("max_search_results", int),
+        "MOMENTO_YOLO_MODEL": ("yolo_model", str),
+        "MOMENTO_CACHE_MAX_SIZE_GB": ("cache_max_size_gb", int),
+        "MOMENTO_LOG_LEVEL": ("log_level", str),
+        "MOMENTO_LOG_FORMAT": ("log_format", str),
+        "MOMENTO_AUGMENTATION_COUNT": ("augmentation_count", int),
+        "MOMENTO_VIDEO_FRAME_INTERVAL": ("video_frame_interval", float),
+        "MOMENTO_INDEXING_BATCH_SIZE": ("indexing_batch_size", int),
+    }
+
+    for env_var, (config_field, converter) in _ENV_MAPPING.items():
+        env_value = os.getenv(env_var)
+        if env_value is not None:
+            try:
+                if converter == str:
+                    setattr(config, config_field, env_value)
+                else:
+                    setattr(config, config_field, converter(env_value))
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse environment variable {env_var}: {e}")
 
     return config
 
@@ -181,6 +219,9 @@ def save_config(config: MomentoConfig, config_path: Optional[str] = None) -> Non
 
     # Organise into sections
     sections = {
+        "embedding": {k: config_dict[k] for k in (
+            "model_name",
+        ) if k in config_dict},
         "features": {k: config_dict[k] for k in (
             "enable_multi_embed", "enable_video_indexing", "enable_yolo", "enable_ocr"
         ) if k in config_dict},
@@ -233,27 +274,37 @@ def save_config(config: MomentoConfig, config_path: Optional[str] = None) -> Non
         raise
 
 
-def apply_config_overrides(cli_args: Optional[Dict[str, Any]] = None) -> None:
-    """Apply CLI flag overrides to the global module-level config variables.
+def apply_config_overrides(config: MomentoConfig, cli_args: Optional[Dict[str, Any]] = None) -> MomentoConfig:
+    """Apply CLI flag overrides to a MomentoConfig dataclass.
+
+    Returns a new config with overrides applied, leaving module-level
+    globals untouched.  Thread-safe and type-checker friendly.
 
     Args:
+        config: Base configuration to apply overrides on top of.
         cli_args: Dict of config key → value from CLI flags.
+
+    Returns:
+        Updated MomentoConfig (same instance, modified in-place).
     """
     if cli_args is None:
-        return
+        return config
 
-    # Mapping of CLI flag names → module-level config variable names
+    # Mapping of CLI flag names → MomentoConfig field names
     _OVERRIDE_MAP = {
-        "threshold": "SIMILARITY_THRESHOLD",
-        "batch_size": "INDEXING_BATCH_SIZE",
-        "max_results": "MAX_SEARCH_RESULTS",
-        "log_format": "LOG_FORMAT",
-        "log_level": "LOG_LEVEL",
+        "threshold": "similarity_threshold",
+        "batch_size": "indexing_batch_size",
+        "max_results": "max_search_results",
+        "log_format": "log_format",
+        "log_level": "log_level",
     }
 
-    for cli_key, var_name in _OVERRIDE_MAP.items():
+    for cli_key, field_name in _OVERRIDE_MAP.items():
         if cli_key in cli_args and cli_args[cli_key] is not None:
-            globals()[var_name] = cli_args[cli_key]
+            if hasattr(config, field_name):
+                setattr(config, field_name, cli_args[cli_key])
+
+    return config
 
 
 def get_device() -> str:

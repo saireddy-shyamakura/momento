@@ -15,23 +15,36 @@ except ImportError:
 
 logger = get_logger(__name__)
 
+_CHUNK_SIZE = 500  # flush embeddings to ChromaDB every N images to bound RAM
+
 def _make_progress(total: int, desc: str):
     if _HAS_TQDM:
         return tqdm(total=total, desc=desc)
     return None
 
+
+def _flush_chunk(index: Index, paths: list, features: list) -> int:
+    """Flush a chunk of embeddings to the index and return count."""
+    if not paths:
+        return 0
+    metadatas = [{"path": p, "source_path": p, "type": "image"} for p in paths]
+    index.add_vectors(paths, features, metadatas)
+    return len(paths)
+
+
 def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
     """
     Add images from a folder to the index using batch processing.
-    
+
     Validates folder exists and is readable. Skips invalid files with logging.
     Batches feature extraction and index updates to minimize index rebuilds.
-    
+    Processes embeddings in chunks to bound memory usage.
+
     Args:
         folder: Path to folder containing images
         index: Index instance
         batch_size: Number of images to process at once
-        
+
     Returns:
         Number of images successfully added
     """
@@ -43,16 +56,14 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
 
     paths_to_process = []
     failed = 0
-    
+
     logger.info(f"Scanning folder (recursive): {folder}")
-    
+
     # Collect all candidate image paths recursively
     candidate_paths = []
     for root, dirs, files in os.walk(folder, followlinks=False):
-        for d in dirs:
-            full = os.path.join(root, d)
-            if os.path.islink(full):
-                logger.debug(f"Skipping symlink directory: {full}")
+        # Remove symlink directories IN-PLACE so os.walk does not descend into them
+        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
         for file in files:
             path = os.path.abspath(os.path.join(root, file))
 
@@ -81,7 +92,7 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
     skipped = len(existing_ids)
     if skipped > 0:
         logger.info(f"Resuming: {skipped} images already indexed.")
-    
+
     paths_to_process = [p for p in candidate_paths if p not in existing_ids]
 
     if not paths_to_process:
@@ -94,15 +105,15 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
 
     total = len(paths_to_process)
     logger.info(f"Found {total} new images to process.")
-    
+
     # Process in batches
     total_batches = (total + batch_size - 1) // batch_size
     progress = _make_progress(total_batches, "Indexing images")
-    
-    successful_paths = []
-    new_features = []
-    processed = 0
-    
+
+    chunk_paths = []
+    chunk_features = []
+    added = 0
+
     for i in range(0, total, batch_size):
         batch = paths_to_process[i:i+batch_size]
 
@@ -125,32 +136,33 @@ def add_images(folder: str, index: Index, batch_size: int = 32) -> int:
                     save_embedding(bp, np.asarray(bf))
                 except Exception:
                     pass
-                successful_paths.append(bp)
-                new_features.append(bf)
+                chunk_paths.append(bp)
+                chunk_features.append(bf)
 
-        # Add cached ones to results
+        # Add cached ones to results (not "added" — they were already indexed)
         for p, emb in cached_features.items():
-            successful_paths.append(p)
-            new_features.append(np.asarray(emb))
+            chunk_paths.append(p)
+            chunk_features.append(np.asarray(emb))
 
-        processed += len(batch)
+        # Flush chunk when threshold reached to bound memory usage
+        if len(chunk_paths) >= _CHUNK_SIZE:
+            added += _flush_chunk(index, chunk_paths, chunk_features)
+            chunk_paths = []
+            chunk_features = []
+
         if progress:
             progress.update(1)
         else:
-            print(f"Processing: {processed}/{total} images...")
-            
+            print(f"Processing: {min(i + batch_size, total)}/{total} images...")
+
     if progress:
         progress.close()
-    
-    added = len(successful_paths)
+
+    # Flush remaining
+    added += _flush_chunk(index, chunk_paths, chunk_features)
     failed += (total - added)
 
-    if added > 0:
-        metadatas = [{"path": p, "source_path": p, "type": "image"} for p in successful_paths]
-        index.add_vectors(successful_paths, new_features, metadatas)
-        logger.info(f"Added {added} images, skipped {skipped}, failed {failed}")
-    else:
-        logger.warning(f"Failed to process any new images out of {total} attempted.")
-        
+    logger.info(f"Added {added} images, skipped {skipped}, failed {failed}")
+
     print(f"Done: {added} added, {skipped} skipped, {failed} failed")
     return added

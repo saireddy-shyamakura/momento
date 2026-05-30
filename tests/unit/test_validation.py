@@ -193,14 +193,23 @@ class TestValidatePositiveInt:
         is_valid, err = validate_positive_int(1, "top_k")
         assert is_valid is True
 
-    def test_max_boundary(self):
-        is_valid, err = validate_positive_int(100, "top_k")
+    def test_max_boundary_default(self):
+        is_valid, err = validate_positive_int(100000, "top_k")
         assert is_valid is True
 
-    def test_exceeds_max(self):
-        is_valid, err = validate_positive_int(101, "top_k")
+    def test_exceeds_default_max(self):
+        is_valid, err = validate_positive_int(100001, "top_k")
         assert is_valid is False
         assert "maximum" in err.lower()
+
+    def test_custom_max_override(self):
+        is_valid, err = validate_positive_int(101, "top_k", max_val=100)
+        assert is_valid is False
+        assert "maximum" in err.lower()
+
+    def test_custom_max_boundary(self):
+        is_valid, err = validate_positive_int(100, "top_k", max_val=100)
+        assert is_valid is True
 
     def test_zero(self):
         is_valid, err = validate_positive_int(0, "top_k")
@@ -411,11 +420,11 @@ class TestValidatorProperties:
         )
 
     @settings(max_examples=200)
-    @given(n=st.integers().filter(lambda x: x <= 0 or x > 100))
+    @given(n=st.integers().filter(lambda x: x <= 0 or x > 100000))
     def test_invalid_inputs_return_false_nonempty_out_of_range_int(self, n: int):
         """
         validate_positive_int must return (False, non-empty str) for
-        integers that are ≤ 0 or > 100.
+        integers that are ≤ 0 or > 100000 (the default max_val).
 
         **Validates: Requirements 1.3**
         """

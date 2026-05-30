@@ -11,26 +11,76 @@ logger = get_logger(__name__)
 
 _model: Optional[torch.nn.Module] = None
 _preprocess: Optional[callable] = None
+_current_model_name: Optional[str] = None
 
 
-def get_model() -> Tuple[torch.nn.Module, callable]:
+def get_model(model_name: Optional[str] = None) -> Tuple[torch.nn.Module, callable]:
     """
     Get or load the CLIP model and preprocessing function.
     
     Model is cached globally to avoid reloading on each use.
+    If model_name differs from cached model, reloads the new model.
+    
+    Args:
+        model_name: Name of CLIP model to load. If None, uses default MODEL_NAME.
+                   Supported: ViT-B/32, ViT-B/16, ViT-L/14, ViT-L/14@336px, ConvNeXt-B
     
     Returns:
         Tuple of (model, preprocess_function)
     """
-    global _model, _preprocess
-    if _model is None:
-        dev = device_manager.device
-        logger.info(f"Loading CLIP model ({MODEL_NAME}) on device: {dev}")
-        _model, _preprocess = clip.load(MODEL_NAME, device=dev)
+    global _model, _preprocess, _current_model_name
+    
+    if model_name is None:
+        model_name = MODEL_NAME
+    
+    # Return cached model if it matches the requested model
+    if _model is not None and _current_model_name == model_name:
+        return _model, _preprocess
+    
+    dev = device_manager.device
+    logger.info(f"Loading CLIP model ({model_name}) on device: {dev}")
+    _model, _preprocess = clip.load(model_name, device=dev)
+    _current_model_name = model_name
     return _model, _preprocess
 
 
-def extract_image_features(image_path: str) -> np.ndarray:
+def clear_model_cache() -> None:
+    """Clear the cached model to free GPU/CPU memory.
+
+    Call this after indexing completes if no search queries are
+    expected immediately.  The model will be lazily reloaded on
+    the next call to ``get_model()``.
+    """
+    global _model, _preprocess, _current_model_name
+
+    if _model is not None:
+        dev = _model
+        # Move model to CPU before releasing reference to help PyTorch
+        # reclaim GPU memory more eagerly
+        try:
+            _model = _model.to("cpu")
+        except Exception:
+            pass
+
+    _model = None
+    _preprocess = None
+    _current_model_name = None
+
+    import gc
+    gc.collect()
+
+    # Try to clear CUDA cache (no-op if CUDA is not available)
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+    logger.info("Model cache cleared — GPU memory released")
+
+
+def extract_image_features(image_path: str, model_name: Optional[str] = None) -> np.ndarray:
     """
     Extract normalized feature vector from an image.
     
@@ -38,6 +88,7 @@ def extract_image_features(image_path: str) -> np.ndarray:
     
     Args:
         image_path: Path to image file
+        model_name: CLIP model to use. If None, uses default from config.
         
     Returns:
         Normalized feature vector as numpy array (float32)
@@ -58,7 +109,7 @@ def extract_image_features(image_path: str) -> np.ndarray:
     if not os.access(image_path, os.R_OK):
         raise RuntimeError(f"Image file is not readable: {image_path}")
     
-    model, preprocess = get_model()
+    model, preprocess = get_model(model_name)
 
     try:
         # Try to open and convert image to RGB
@@ -72,12 +123,12 @@ def extract_image_features(image_path: str) -> np.ndarray:
     except Exception as e:
         raise RuntimeError(f"Failed to load image {image_path}: {type(e).__name__}: {e}")
 
-    return _encode_pil_image(image, image_path)
+    return _encode_pil_image(image, image_path, model_name)
 
 
-def _encode_pil_image(image: Image.Image, source_label: str = "<pil>") -> np.ndarray:
+def _encode_pil_image(image: Image.Image, source_label: str = "<pil>", model_name: Optional[str] = None) -> np.ndarray:
     """Encode a single PIL Image to a normalized CLIP embedding."""
-    model, preprocess = get_model()
+    model, preprocess = get_model(model_name)
     dev = device_manager.device
 
     try:
@@ -180,7 +231,7 @@ def extract_pil_features_batch(
     return all_features
 
 
-def extract_text_features(text: str) -> np.ndarray:
+def extract_text_features(text: str, model_name: Optional[str] = None) -> np.ndarray:
     """
     Extract normalized feature vector from text.
     
@@ -188,6 +239,7 @@ def extract_text_features(text: str) -> np.ndarray:
     
     Args:
         text: Text description
+        model_name: CLIP model to use. If None, uses default from config.
         
     Returns:
         Normalized feature vector as numpy array (float32)
@@ -203,7 +255,7 @@ def extract_text_features(text: str) -> np.ndarray:
     if len(text) > 1000:
         raise ValueError("Text query too long (max 1000 characters)")
     
-    model, _ = get_model()
+    model, _ = get_model(model_name)
     dev = device_manager.device
 
     try:
@@ -228,9 +280,13 @@ def extract_text_features(text: str) -> np.ndarray:
 
 # ── Multi-embedding helpers ───────────────────────────────────────────
 
-def extract_multi_embeddings(image_path: str) -> List[Tuple[str, np.ndarray]]:
+def extract_multi_embeddings(image_path: str, model_name: Optional[str] = None) -> List[Tuple[str, np.ndarray]]:
     """
     Generate embeddings for the original image + augmented views.
+
+    Args:
+        image_path: Path to the image file
+        model_name: CLIP model to use. If None, uses default from config.
 
     Returns:
         List of (suffix, embedding) tuples.  suffix is 'orig', 'flip', etc.
@@ -241,14 +297,14 @@ def extract_multi_embeddings(image_path: str) -> List[Tuple[str, np.ndarray]]:
         img_rgb = img.convert("RGB")
 
     # Original embedding
-    orig_emb = _encode_pil_image(img_rgb, image_path)
+    orig_emb = _encode_pil_image(img_rgb, image_path, model_name)
     results: List[Tuple[str, np.ndarray]] = [("orig", orig_emb)]
 
     # Augmented views
     views = generate_augmentations(img_rgb)
     for suffix, aug_img in views:
         try:
-            emb = _encode_pil_image(aug_img, f"{image_path}{COMPOSITE_SEP}{suffix}")
+            emb = _encode_pil_image(aug_img, f"{image_path}{COMPOSITE_SEP}{suffix}", model_name)
             results.append((suffix, emb))
         except Exception as e:
             logger.warning(f"Augmentation embed failed ({suffix}): {e}")

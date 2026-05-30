@@ -140,26 +140,28 @@ def validate_folder_path(path: str) -> Tuple[bool, str]:
     return True, ""
 
 
-def validate_positive_int(value: int, name: str = "value") -> Tuple[bool, str]:
+def validate_positive_int(value: int, name: str = "value", max_val: int = 100000) -> Tuple[bool, str]:
     """
     Validate that a value is a positive integer.
-    
+
     Args:
         value: Value to validate
         name: Name of the parameter (for error messages)
-        
+        max_val: Maximum allowed value (default 100000 — arbitrary config limit,
+                 caller can override, e.g. max_search_results=50).
+
     Returns:
         Tuple of (is_valid, error_message)
     """
     if not isinstance(value, int):
         return False, f"{name} must be an integer"
-    
+
     if value <= 0:
         return False, f"{name} must be positive (got {value})"
-    
-    if value > 100:
-        return False, f"{name} exceeds maximum (100)"
-    
+
+    if value > max_val:
+        return False, f"{name} exceeds maximum ({max_val})"
+
     return True, ""
 
 

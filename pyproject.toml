@@ -1,6 +1,6 @@
 [project]
 name = "momento"
-version = "2.0.0"
+version = "2.1.0"
 description = "A semantic image search engine powered by OpenAI CLIP and ChromaDB"
 authors = [
     { name = "Sai Reddy Shyamakura" }
@@ -44,7 +44,23 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-markers = ["slow: marks tests as slow, e.g. integration tests that load the CLIP model (deselect with -m 'not slow')"]
+markers = [
+    "slow: marks tests as heavy (real models, video/OCR/YOLO). Deselect with -m 'not slow'",
+    "unit: fast unit tests (no ML model loading)",
+    "integration: heavy tests that load PyTorch/CLIP/YOLO/OCR models",
+]
+addopts = [
+    "-p no:xdist",
+    "-p no:forked",
+    "-m not slow",
+    "--tb=short",
+    "-q",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:PIL",
+    "ignore::DeprecationWarning:numpy",
+    "ignore::DeprecationWarning:torch",
+]
 
 [build-system]
 requires = ["setuptools>=61.0"]

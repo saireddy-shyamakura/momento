@@ -3,6 +3,8 @@ lock.py — Process lock with TTL support for Momento.
 
 Provides cross-instance exclusion with automatic stale-lock cleanup
 based on both PID-aliveness AND a time-to-live (TTL) threshold.
+
+Uses atomic O_EXCL file creation to prevent TOCTOU race conditions.
 """
 
 import os
@@ -15,7 +17,11 @@ LOCK_TTL_SECONDS = 6 * 3600  # 6 hours — a lock this old is almost certainly s
 
 
 class LockFile:
-    """PID-based lock file with TTL and stale-lock detection."""
+    """PID-based lock file with TTL and stale-lock detection.
+
+    Uses the atomic ``os.open(path, O_CREAT | O_EXCL | O_WRONLY)`` pattern
+    to prevent two processes from acquiring the lock simultaneously.
+    """
 
     def __init__(self, path: str, ttl: int = LOCK_TTL_SECONDS):
         """Initialize the LockFile.
@@ -64,50 +70,68 @@ class LockFile:
             pass
         return None
 
+    def _atomic_write(self) -> bool:
+        """Atomically create the lock file using O_CREAT | O_EXCL.
+
+        Returns:
+            True if the file was created, False if another process holds the lock.
+        """
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            try:
+                with os.fdopen(fd, 'w') as f:
+                    f.write(f"{os.getpid()},{time.time()}")
+            except OSError:
+                os.close(fd)
+            return True
+        except FileExistsError:
+            return False
+
     def acquire(self) -> bool:
         """Attempt to acquire the lock.
 
-        Automatically cleans up stale locks from:
-        - Dead processes (PID no longer alive)
-        - Locks older than TTL (even if PID is alive — e.g., leftover from
-          a machine that hibernated)
+        Uses atomic file creation. If that fails, checks the existing lock
+        for staleness. Only removes and retries if the lock is confirmed stale.
 
         Returns:
             True if the lock was successfully acquired, False otherwise.
         """
-        if os.path.exists(self.path):
-            lock_data = self._read_lock_data()
-            if lock_data is not None:
-                old_pid, timestamp = lock_data
-                age = time.time() - timestamp
+        # Fast path — attempt atomic acquire
+        if self._atomic_write():
+            return True
 
-                if age < self.ttl and self._pid_alive(old_pid):
-                    # Lock is still valid
-                    return False
-
-                # Stale — clean it up
-                reason = ""
-                if not self._pid_alive(old_pid):
-                    reason = f"dead PID {old_pid}"
-                else:
-                    reason = f"lock older than {self.ttl}s ({age:.0f}s ago)"
-                logger.warning(f"Removing stale lock file ({reason})")
-            else:
-                logger.warning("Removing unparseable lock file")
-
+        # Lock exists — read and check for staleness
+        lock_data = self._read_lock_data()
+        if lock_data is None:
+            # Unparseable — try to replace it
             try:
                 os.remove(self.path)
-            except OSError as e:
-                logger.error(f"Failed to remove stale lock file: {e}")
+            except OSError:
                 return False
+            return self._atomic_write()
+
+        old_pid, timestamp = lock_data
+        age = time.time() - timestamp
+
+        if age < self.ttl and self._pid_alive(old_pid):
+            # Lock is still valid
+            return False
+
+        # Stale — clean it up
+        reason = ""
+        if not self._pid_alive(old_pid):
+            reason = f"dead PID {old_pid}"
+        else:
+            reason = f"lock older than {self.ttl}s ({age:.0f}s ago)"
+        logger.warning(f"Removing stale lock file ({reason})")
 
         try:
-            with open(self.path, 'w') as f:
-                f.write(f"{os.getpid()},{time.time()}")
-            return True
+            os.remove(self.path)
         except OSError as e:
-            logger.error(f"Failed to create lock file: {e}")
+            logger.error(f"Failed to remove stale lock file: {e}")
             return False
+
+        return self._atomic_write()
 
     def release(self) -> None:
         """Release the lock if it exists."""

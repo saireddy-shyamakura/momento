@@ -170,7 +170,7 @@ class FilePicker:
         
         # Get disk free space
         try:
-            disk_usage = shutil.disk_usage(os.path.dirname(self._get_data_dir() or "/"))
+            disk_usage = shutil.disk_usage(os.path.dirname(FilePicker._get_data_dir() or "/"))
             free_gb = disk_usage.free / (1024**3)
         except Exception:
             free_gb = float('inf')  # Can't determine, skip check

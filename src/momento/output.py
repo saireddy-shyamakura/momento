@@ -69,17 +69,30 @@ def open_file(path: str) -> None:
     """
     Open a file in the system default viewer (cross-platform).
 
+    Validates the path exists and is a regular file before passing it to
+    the OS launcher.  This prevents security issues where a crafted index
+    entry could cause xdg-open to interpret a URI or execute a handler.
+
     Args:
         path: Path to the file to open.
 
     Raises:
-        OSError: If os.startfile fails (Windows).
-        subprocess.CalledProcessError: If the open/xdg-open command fails.
+        FileNotFoundError: If *path* does not exist.
+        RuntimeError: If the platform's opener is unavailable or fails.
     """
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"File not found: {path}")
+
     system = platform.system()
-    if system == "Windows":
-        os.startfile(path)  # type: ignore[attr-defined]
-    elif system == "Darwin":
-        subprocess.run(["open", path], check=True)
-    else:
-        subprocess.run(["xdg-open", path], check=True)
+    try:
+        if system == "Windows":
+            if hasattr(os, "startfile"):
+                os.startfile(path)
+            else:
+                raise RuntimeError("os.startfile is not available on this Windows build")
+        elif system == "Darwin":
+            subprocess.run(["open", path], check=True)
+        else:
+            subprocess.run(["xdg-open", path], check=True)
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise RuntimeError(f"Failed to open {path}: {e}")

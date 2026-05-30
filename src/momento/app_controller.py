@@ -7,6 +7,7 @@ Coordinates the three-phase workflow:
 3. Interactive query interface
 
 Handles graceful shutdown via SIGINT/SIGTERM signal handlers.
+Supports checkpoint-based recovery for interrupted operations.
 """
 
 import os
@@ -19,7 +20,7 @@ from importlib.metadata import version as _pkg_version
 from .logger import setup_logger, get_logger
 from .index import Index
 from .cache import clear_cache
-from .config import BASE_DIR, CHROMA_DB_DIR, COMPOSITE_SEP, MAX_SEARCH_RESULTS
+from .config import BASE_DIR, CHROMA_DB_DIR, COMPOSITE_SEP, MAX_SEARCH_RESULTS, MomentoConfig, load_config
 from .validation import validate_folder_path, validate_positive_int
 from .indexer import Indexer, IndexingStats
 from .query_manager import QueryManager
@@ -27,6 +28,9 @@ from .file_picker import FilePicker
 from .lock import LockFile
 from .search import image_search, text_search
 from .shutdown import is_shutdown_requested, install_signal_handlers, reset_shutdown_flag
+from .checkpoint import get_checkpoint_manager, FeatureStatus
+from .storage_manager import get_storage_manager
+from .features import clear_model_cache
 
 logger = setup_logger(__name__)
 
@@ -38,16 +42,24 @@ class AppState:
     index: Optional[Index] = None
     last_indexing_stats: Optional[IndexingStats] = None
     is_first_run: bool = True
+    config: Optional[MomentoConfig] = None
 
 
 class AppController:
     """Main application controller orchestrating the full workflow."""
     
-    def __init__(self):
-        """Initialize the app controller."""
+    def __init__(self, config: Optional[MomentoConfig] = None):
+        """Initialize the app controller.
+        
+        Args:
+            config: MomentoConfig instance. If None, loads from file/env/defaults.
+        """
         self.state = AppState()
+        self.state.config = config or load_config()
         lock_path = os.path.join(BASE_DIR, "momento.lock")
         self.lock_file = LockFile(lock_path)
+        self.checkpoint_manager = get_checkpoint_manager()
+        self.storage_manager = get_storage_manager()
         install_signal_handlers()
         
     def initialize_index(self) -> Index:
@@ -249,6 +261,8 @@ class AppController:
             print(f"Error: {e}")
             sys.exit(1)
         finally:
+            # Release CLIP model GPU/CPU memory before exiting
+            clear_model_cache()
             # Ensure ChromaDB is cleanly closed on exit
             if self.state.index is not None:
                 self.state.index.close()

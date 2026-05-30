@@ -154,6 +154,37 @@ Note: All features (multi-embedding, video, YOLO, OCR) are enabled by default.
         type=str,
         help="Directory to index on startup (optional)"
     )
+    
+    # ── Model selection ──────────────────────────────────────────────
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        choices=["ViT-B/32", "ViT-B/16", "ViT-L/14", "ViT-L/14@336px", "ConvNeXt-B"],
+        help="CLIP embedding model (default: ViT-B/16)"
+    )
+    
+    # ── Feature toggles ──────────────────────────────────────────────
+    parser.add_argument(
+        "--no-multi-embed",
+        action="store_true",
+        help="Disable multi-embedding augmentation"
+    )
+    parser.add_argument(
+        "--no-video",
+        action="store_true",
+        help="Disable video keyframe indexing"
+    )
+    parser.add_argument(
+        "--no-yolo",
+        action="store_true",
+        help="Disable YOLO object detection"
+    )
+    parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        help="Disable OCR text extraction"
+    )
     parser.add_argument(
         "--threshold",
         type=float,
@@ -194,6 +225,19 @@ Note: All features (multi-embedding, video, YOLO, OCR) are enabled by default.
     config_set = config_subparsers.add_parser("set", help="Set a configuration value")
     config_set.add_argument("key", type=str, help="Configuration key (e.g., threshold)")
     config_set.add_argument("value", type=str, help="Configuration value")
+
+    # storage subcommand
+    storage_parser = subparsers.add_parser("storage", help="Manage storage and cache")
+    storage_subparsers = storage_parser.add_subparsers(dest="storage_action", help="Storage actions")
+    storage_subparsers.add_parser("info", help="Show storage usage")
+    storage_subparsers.add_parser("clear-cache", help="Clear embedding cache")
+    storage_subparsers.add_parser("clear-logs", help="Clear application logs")
+    storage_subparsers.add_parser("optimize", help="Optimize database")
+    storage_subparsers.add_parser("backup", help="Create database backup")
+    storage_restore = storage_subparsers.add_parser("restore", help="Restore database from backup")
+    storage_restore.add_argument("backup_file", type=str, help="Path to backup file")
+    storage_export = storage_subparsers.add_parser("export", help="Export database to SQL dump")
+    storage_export.add_argument("-o", "--output", type=str, required=True, help="Output file path")
 
     # doctor subcommand
     subparsers.add_parser("doctor", help="Run system health check")

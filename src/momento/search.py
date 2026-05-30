@@ -59,6 +59,47 @@ def image_search(query_image_path: str, index: Index, top_k: int = 3,
     return _search(query, top_k, index, threshold=threshold, use_aggregation=use_aggregation)
 
 
+def _text_should_be_prefixed(text: str) -> bool:
+    """Determine if a text query should be prefixed with 'a photo of'.
+
+    Returns True when the query looks like a short noun phrase rather
+    than a full natural-language sentence:
+      - Does not start with a known article/determiner prefix
+      - Does not end with sentence punctuation (., !, ?)
+      - Contains no verbs (heuristic: auxiliary/be verbs at word-2 position)
+      - Is shorter than 6 words
+    All conditions must hold to avoid mangling well-formed queries like
+    "a beautiful sunset over the mountains" or "show me pictures of cats."
+    """
+    normalized = text.strip().lower()
+    word_count = len(normalized.split())
+
+    # Already has a clear article/determiner prefix
+    prefix_words = ("a ", "an ", "the ", "my ", "this ", "that ",
+                    "some ", "any ", "these ", "those ", "what ",
+                    "which ", "whose ", "photo ", "picture ", "image ")
+    if normalized.startswith(prefix_words):
+        return False
+
+    # Ends with sentence punctuation  -> natural sentence
+    if normalized[-1:] in (".", "!", "?"):
+        return False
+
+    # Contains known verb/auxiliary at word-2  -> natural sentence
+    verbs = {"is", "are", "was", "were", "be", "been", "being",
+             "has", "have", "had", "do", "does", "did",
+             "show", "find", "get", "give", "search", "look"}
+    first_word = normalized.split()[0] if word_count >= 1 else ""
+    if first_word in verbs:
+        return False
+
+    # Long multi-word queries are likely already well-formed
+    if word_count >= 6:
+        return False
+
+    return True
+
+
 def text_search(text: str, index: Index, top_k: int = 3,
                 threshold: float = SIMILARITY_THRESHOLD,
                 use_aggregation: bool = False) -> List[Tuple[float, str]]:
@@ -85,9 +126,8 @@ def text_search(text: str, index: Index, top_k: int = 3,
     
     text = text.strip()
     
-    # Only add prefix if user didn't already provide a natural sentence
-    prefix_words = ("a ", "an ", "the ", "my ", "this ", "some ", "photo ", "picture ", "image ")
-    if not text.lower().startswith(prefix_words):
+    # Only add prefix if query looks like a bare noun phrase
+    if _text_should_be_prefixed(text):
         text = f"a photo of {text}"
     
     query = extract_text_features(text).reshape(1, -1)

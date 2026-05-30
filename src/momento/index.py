@@ -399,21 +399,13 @@ class Index:
         Triggers a compaction of the on-disk layout after large indexing
         operations to improve search latency. This is a hint to ChromaDB
         and may be a no-op in some configurations.
+
+        Note: ChromaDB auto-compacts during normal operations — this
+        call is primarily informational.  The expensive metadata-write
+        hack was removed (see audit P6).
         """
-        try:
-            # ChromaDB auto-compacts during normal operations; this
-            # hints to the system to prioritize compaction
-            count = self.get_vector_count()
-            logger.info(f"Optimization requested — index has {count} vectors")
-            # In newer ChromaDB versions, we can trigger a metadata update
-            # to encourage compaction
-            if self.collection.metadata is not None:
-                current_meta = dict(self.collection.metadata)
-                current_meta["optimized_at"] = str(os.path.getmtime(self.db_path) if os.path.exists(self.db_path) else "")
-                self.collection.modify(metadata=current_meta)
-            logger.debug("Index optimization hint sent to ChromaDB")
-        except Exception as e:
-            logger.debug(f"Index optimization hint failed (non-critical): {e}")
+        count = self.get_vector_count()
+        logger.info(f"Optimization requested — index has {count} vectors")
 
     def export_all_data(self) -> Tuple[List[str], List[List[float]], List[Dict[str, Any]]]:
         """Export all ids, embeddings, and metadata from the collection.

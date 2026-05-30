@@ -47,7 +47,9 @@ class TestPreviewIndexableFiles:
         preview = picker.preview_indexable_files(str(tmp_path))
         assert preview["total_count"] == 2
 
-    def test_preview_ignores_symlinks(self, tmp_path):
+    def test_preview_includes_symlink_files(self, tmp_path):
+        """Symlink files are counted in preview (only symlink directories
+        are skipped via followlinks=False)."""
         target = tmp_path / "real_target.jpg"
         target.write_bytes(b"dummy")
         link = tmp_path / "link.jpg"
@@ -57,8 +59,8 @@ class TestPreviewIndexableFiles:
             pytest.skip("Cannot create symlink on this system")
         picker = FilePicker()
         preview = picker.preview_indexable_files(str(tmp_path))
-        # followlinks=False by default in os.walk
-        assert preview["total_count"] == 1
+        # Both the real file and the symlink file are counted
+        assert preview["total_count"] == 2
 
     def test_preview_nonexistent_folder_returns_zeros(self):
         picker = FilePicker()

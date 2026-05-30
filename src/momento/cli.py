@@ -215,6 +215,29 @@ Note: All features (multi-embedding, video, YOLO, OCR) are enabled by default.
         help="Comma-separated glob patterns to exclude (e.g., '*.txt,private/')"
     )
 
+    # ── V3 Retrieval Pipeline Flags ──────────────────────────────────
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Enable optional re-ranking stage (V3)"
+    )
+    parser.add_argument(
+        "--no-hybrid",
+        action="store_true",
+        help="Disable hybrid exact+semantic search (V3)"
+    )
+    parser.add_argument(
+        "--no-query-expansion",
+        action="store_true",
+        help="Disable query expansion (V3)"
+    )
+    parser.add_argument(
+        "--fusion-weights",
+        type=str,
+        default=None,
+        help="Fusion weights as 'embed,obj,ocr' (e.g. '0.5,0.3,0.2') (V3)"
+    )
+
     # ── Subcommands ──────────────────────────────────────────────────
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 

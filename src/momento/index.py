@@ -21,7 +21,7 @@ from .logger import get_logger
 logger = get_logger(__name__)
 
 # Current Momento and ChromaDB versions stored as collection metadata
-MOMENTO_VERSION = "2.0.0"
+MOMENTO_VERSION = "3.0.0"
 
 # ChromaDB transient errors that warrant a retry
 _RETRYABLE_EXCEPTIONS = (

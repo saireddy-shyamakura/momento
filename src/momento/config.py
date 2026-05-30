@@ -70,6 +70,23 @@ INDEXING_BATCH_SIZE = 32       # batch size for feature extraction
 MAX_SEARCH_RESULTS = 50        # max results to return from search
 PROGRESS_BAR_ENABLED = True    # show progress bars during indexing
 
+# ── V3: Retrieval Pipeline ───────────────────────────────────────────
+ENABLE_RERANK = False          # Enable optional re-ranking stage
+ENABLE_QUERY_EXPANSION = True  # Enable query expansion for better recall
+ENABLE_HYBRID_SEARCH = True    # Enable exact + semantic hybrid search
+RERANK_TOP_K = 10              # Number of candidates to re-rank
+RECALL_MULTIPLIER = 3          # Recall multiplier for first-stage retrieval
+
+# ── V3: Fusion Weights ───────────────────────────────────────────────
+FUSION_WEIGHT_EMBEDDING = 0.6  # Weight for embedding similarity
+FUSION_WEIGHT_OBJECT = 0.2     # Weight for object detection match
+FUSION_WEIGHT_OCR = 0.2        # Weight for OCR relevance
+
+# ── V3: Smart Ranking ─────────────────────────────────────────────────
+RANKING_WEIGHT_EMBEDDING = 0.6 # Weight for embedding score
+RANKING_WEIGHT_RECENCY = 0.2   # Weight for recency (newer = better)
+RANKING_WEIGHT_FREQUENCY = 0.2 # Weight for access frequency
+
 # ── Cache ─────────────────────────────────────────────────────────────
 CACHE_MAX_SIZE_GB = 5          # max cache size in GB (default: 5 GB)
 
